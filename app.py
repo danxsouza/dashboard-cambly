@@ -37,7 +37,7 @@ def carregar_dados():
         return pd.DataFrame()
 
 df = carregar_dados()
-df_original = df.copy() # Guarda os dados totais para a listagem lateral
+df_original = df.copy() 
 
 st.sidebar.header("⚙️ Ações")
 if st.sidebar.button("🚀 Processar Novos PDFs"):
@@ -65,11 +65,21 @@ else:
         data_padrao = df['Data Real'].max()
         data_selecionada = st.sidebar.date_input("Selecione o dia da aula", value=data_padrao)
         
-        # --- SOLUÇÃO PARA A LIMITAÇÃO DO CALENDÁRIO ---
-        st.sidebar.caption("💡 **Datas com aulas registradas:**")
+        # --- ATUALIZAÇÃO 1: FILTRO DE DATAS POR MÊS ---
+        mes_selecionado = data_selecionada.month
+        ano_selecionado = data_selecionada.year
+        
+        st.sidebar.caption(f"💡 **Aulas registradas em {data_selecionada.strftime('%m/%Y')}:**")
+        
         dias_com_aula = df_original['Data Real'].unique()
-        for d in dias_com_aula:
-            st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')}")
+        # Filtra apenas os dias que pertencem ao mês e ano selecionados no calendário
+        dias_no_mes = sorted([d for d in dias_com_aula if d.month == mes_selecionado and d.year == ano_selecionado], reverse=True)
+        
+        if dias_no_mes:
+            for d in dias_no_mes:
+                st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')}")
+        else:
+            st.sidebar.caption("Nenhuma aula encontrada neste mês.")
 
         df = df[df["Data Real"] == data_selecionada]
     
@@ -100,11 +110,12 @@ else:
         contagem_erros = df['Tipo de Erro'].value_counts()
         st.bar_chart(contagem_erros)
 
-        # --- TOP ERROS RECORRENTES (Agora com o professor no título) ---
+        # --- ATUALIZAÇÃO 2: TOP ERROS COM MENU SUSPENSO ---
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes")
         
-        top_n = st.slider("Mostrar top:", min_value=5, max_value=10, value=5)
+        # Trocamos o st.slider pelo st.selectbox
+        top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
         
         erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
         erros_frequentes.columns = ['Explicação', 'Quantidade']
@@ -115,8 +126,6 @@ else:
             exp = row_top['Explicação']
             
             linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
-            
-            # Pegando todos os professores que presenciaram esse erro
             profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
             
             icone = "🔥" if qtd > 1 else "⚠️"
@@ -142,7 +151,7 @@ else:
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
 
-        # --- HISTÓRICO COMPLETO (Separado por professor se tiver data escolhida) ---
+        # --- HISTÓRICO COMPLETO ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         
@@ -164,7 +173,6 @@ else:
                         st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                         st.caption(f"Categoria: {row['Tipo de Erro']} | Arquivo: {row['Arquivo de Origem']}")
         else:
-            # Mantém a listagem padrão se for "Todas as Aulas" ou filtro único
             for index, row in df.iterrows():
                 titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
                 with st.expander(titulo_expander):

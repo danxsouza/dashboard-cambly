@@ -6,8 +6,7 @@ import gspread
 import requests
 import urllib.parse
 from datetime import datetime
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud, STOPWORDS
+from bs4 import BeautifulSoup
 
 # Configuração da página Web
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
@@ -37,6 +36,40 @@ def carregar_dados():
     except Exception as e:
         st.error(f"Ocorreu um erro ao conectar à base de dados: {e}")
         return pd.DataFrame()
+
+# Nova função para ler o blog do Cambridge
+@st.cache_data(ttl=3600) # Atualiza a cada 1 hora para não pesar o site
+def buscar_novas_palavras_cambridge():
+    url = "https://dictionaryblog.cambridge.org/category/new-words/"
+    palavras = []
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        resposta = requests.get(url, headers=headers)
+        soup = BeautifulSoup(resposta.text, 'html.parser')
+        
+        # Procura as postagens no blog
+        artigos = soup.find_all('article', limit=5)
+        for artigo in artigos:
+            titulo_tag = artigo.find(['h1', 'h2'], class_=['entry-title', 'title'])
+            if titulo_tag and titulo_tag.find('a'):
+                titulo = titulo_tag.text.strip()
+                link = titulo_tag.find('a')['href']
+                
+                # Tenta pegar um pequeno resumo
+                conteudo_tag = artigo.find('div', class_='entry-content')
+                resumo = conteudo_tag.text.strip()[:150] + "..." if conteudo_tag else ""
+                
+                palavras.append({"titulo": titulo, "link": link, "resumo": resumo})
+                
+        # Fallback caso a estrutura mude
+        if not palavras:
+            links = soup.select('.entry-title a')[:5]
+            for a in links:
+                palavras.append({"titulo": a.text.strip(), "link": a['href'], "resumo": ""})
+                
+        return palavras
+    except Exception as e:
+        return []
 
 df = carregar_dados()
 df_original = df.copy() 
@@ -118,99 +151,22 @@ else:
             professores_vistos = ", ".join(df["Professor"].unique())
             st.metric("Professor(es)", professores_vistos)
 
-        st.subheader("Distribuição de Erros")
-        contagem_erros = df['Tipo de Erro'].value_counts()
-        st.bar_chart(contagem_erros)
-
-        # --- NUVENS DE PALAVRAS COM FILTRO DE SUPER STOPWORDS ---
+        # --- NOVA SEÇÃO: NEW WORDS CAMBRIDGE ---
         st.markdown("---")
-        st.subheader("☁️ Nuvens de Palavras (Foco em Inglês e Gramática)")
-        st.write("Identifique visualmente quais conceitos gramaticais ou palavras em inglês você mais precisa treinar.")
+        st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
+        st.write("Expanda seu vocabulário com as últimas tendências da língua inglesa analisadas por especialistas.")
         
-        tab_gram, tab_vocab, tab_past = st.tabs(["📘 Gramática", "📝 Vocabulário", "⏳ Gramática (Passado)"])
+        novas_palavras = buscar_novas_palavras_cambridge()
         
-        def gerar_nuvem_palavras(textos, cor_fundo="white", cor_mapa="viridis"):
-            if not textos:
-                st.info("Não há erros suficientes nesta categoria para gerar a nuvem.")
-                return
+        if novas_palavras:
+            for palavra in novas_palavras:
+                st.markdown(f"**[{palavra['titulo']}]({palavra['link']})**")
+                if palavra['resumo']:
+                    st.caption(f"{palavra['resumo']}")
+        else:
+            st.info("Não foi possível buscar as novas palavras no momento.")
             
-            texto_completo = " ".join(textos).lower()
-            
-            # Filtro gigante para remover "lixo" explicativo em PT e EN
-            palavras_ignoradas = set(STOPWORDS)
-            palavras_ignoradas.update([
-                # Genéricas Português
-                "o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "dos", "das", 
-                "em", "no", "na", "nos", "nas", "para", "com", "por", "que", "se", "não", "sim", 
-                "é", "são", "foi", "foram", "era", "eram", "seria", "seriam", "vai", "vão", "vamos", 
-                "iria", "iriam", "quer", "queremos", "ao", "aos", "à", "às", "pelo", "pela", "pelos", 
-                "pelas", "num", "numa", "neste", "nesta", "nesse", "nessa", "naquele", "naquela", 
-                "seu", "sua", "seus", "suas", "meu", "minha", "teu", "tua", "nosso", "nossa", "nós", 
-                "eles", "elas", "ele", "ela", "você", "vocês", "eu", "isso", "isto", "aquilo", 
-                # Termos de explicação AI
-                "frase", "erro", "dica", "estudo", "inglês", "português", "exemplo", "correto", 
-                "correta", "forma", "dizer", "falar", "substituir", "usar", "usado", "uso", "vez", 
-                "significa", "contexto", "caso", "pois", "porque", "como", "quando", "onde", "quem", 
-                "qual", "melhor", "mais", "menos", "muito", "pouco", "sempre", "nunca", "geralmente", 
-                "apenas", "também", "então", "assim", "agora", "depois", "antes", "já", "ainda", 
-                "mesmo", "outro", "outra", "algum", "alguma", "nenhum", "nenhuma", "todo", "toda", 
-                "tudo", "nada", "cada", "qualquer", "pode", "podemos", "deve", "devemos", "ter", "tem", 
-                "temos", "ser", "sendo", "estar", "estamos", "fazer", "fazemos", "dizemos", "saber", 
-                "achar", "pensar", "ver", "olhar", "parecer", "deixar", "ficar", "passar", "chegar", 
-                "levar", "trazer", "pedir", "perguntar", "responder", "explicar", "entender", "lembrar", 
-                "esquecer", "tentar", "conseguir", "começar", "terminar", "continuar", "parar", 
-                "precisar", "ajudar", "usando", "maneira", "modo", "vezes", "diferença", "comum", 
-                "natural", "nativos", "soa", "soar", "cometer", "atenção", "cuidado", "lembre", 
-                "note", "notar", "perceber", "ideia", "sentido", "significado", "tradução", "literal", 
-                "literalmente", "palavra", "palavras", "expressão", "expressões", "frases", "texto", 
-                "conversa", "aula", "professor", "aluno", "estudante", "aprender", "ensinar", "praticar", 
-                "treinar", "melhorar", "corrigir", "correção", "dicas", "regras", "regra", "exceção", 
-                "situação", "situações", "casos", "invés", "lugar", "existe", "existem", 
-                "costuma", "costumam", "certo", "errado", "errada", "algo", "alguém", "deveria",
-                # Genéricas Inglês (Para destacar os verbos/palavras difíceis, removemos as básicas)
-                "the", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on", 
-                "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", 
-                "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", 
-                "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", 
-                "can", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your", 
-                "some", "them", "see", "other", "than", "then", "now", "look", "only", "come", "its", 
-                "over", "also", "back", "after", "use", "two", "how", "our", "work", "first", "well", 
-                "way", "even", "new", "want", "because", "any", "these", "give", "day", "most", "us", 
-                "is", "are", "am", "be", "been", "being"
-            ])
-            
-            wordcloud = WordCloud(
-                width=800, height=350, 
-                background_color=cor_fundo, 
-                stopwords=palavras_ignoradas, 
-                max_words=20,
-                colormap=cor_mapa
-            ).generate(texto_completo)
-            
-            fig, ax = plt.subplots(figsize=(10, 4.5))
-            ax.imshow(wordcloud, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
-
-        # Aba 1: Nuvem de Gramática (Pega a explicação e a frase correta para mostrar os termos e a gramática inglesa correta)
-        with tab_gram:
-            df_gram = df[df['Tipo de Erro'].str.contains('Gramática', case=False, na=False)]
-            textos_gram = df_gram['Explicação e Dica de Estudo'].tolist() + df_gram['Como Falar Corretamente'].tolist()
-            gerar_nuvem_palavras(textos_gram, cor_mapa="Blues")
-
-        # Aba 2: Nuvem de Vocabulário
-        with tab_vocab:
-            df_vocab = df[df['Tipo de Erro'].str.contains('Vocabulário', case=False, na=False)]
-            textos_vocab = df_vocab['Explicação e Dica de Estudo'].tolist() + df_vocab['Como Falar Corretamente'].tolist()
-            gerar_nuvem_palavras(textos_vocab, cor_mapa="Greens")
-
-        # Aba 3: Nuvem do Passado
-        with tab_past:
-            # Filtro inteligente: Busca erros categorizados como Gramática que mencionam termos de passado
-            filtro_passado = df['Explicação e Dica de Estudo'].str.contains(r'passado|past|was|were|did|\bed\b', case=False, na=False)
-            df_past = df[df['Tipo de Erro'].str.contains('Gramática', case=False, na=False) & filtro_passado]
-            textos_passado = df_past['Explicação e Dica de Estudo'].tolist() + df_past['Como Falar Corretamente'].tolist()
-            gerar_nuvem_palavras(textos_passado, cor_mapa="magma")
+        st.markdown("🔗 **[Acessar a página oficial do New Words - Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes")

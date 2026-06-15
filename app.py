@@ -44,9 +44,12 @@ def chamar_gemini(frase, dica):
     except:
         return "Erro ao conectar com IA."
 
-df = carregar_dados()
+# --- CARREGAMENTO INICIAL E CRIAÇÃO DA BASE GLOBAL ---
+df_original = carregar_dados() 
+df = df_original.copy() # Criamos a cópia de trabalho aqui
+
 if df.empty:
-    st.warning("Sem dados.")
+    st.warning("Sem dados processados. Suba seus PDFs!")
 else:
     # FILTROS
     modo = st.sidebar.radio("Período:", ["Todas as Aulas", "Escolher Data no Calendário"])
@@ -55,16 +58,17 @@ else:
         if len(periodo) == 2:
             df = df[(df['Data Real'] >= periodo[0]) & (df['Data Real'] <= periodo[1])]
     
-    prof_sel = st.sidebar.selectbox("👨‍🏫 Professor", ["Todos"] + df['Professor'].unique().tolist())
+    prof_sel = st.sidebar.selectbox("👨‍🏫 Professor", ["Todos"] + df_original['Professor'].unique().tolist())
     if prof_sel != "Todos":
         df = df[df['Professor'] == prof_sel]
 
     # TOP ERROS (GLOBAL)
     st.subheader("🔥 Top Erros Mais Recorrentes (Base Global)")
-    top_n = st.selectbox("Mostrar:", [5, 6, 7, 8, 9, 10])
+    top_n = st.selectbox("Quantidade de erros para exibir:", [5, 6, 7, 8, 9, 10])
     
-    # AGORA USA O df original para contagem global
+    # Agora df_original existe e é usado aqui
     frequencia = df_original['Explicação e Dica de Estudo'].value_counts().head(top_n)
+    
     for exp, qtd in frequencia.items():
         linhas = df_original[df_original['Explicação e Dica de Estudo'] == exp]
         with st.expander(f"{qtd} vezes - {exp[:60]}..."):
@@ -84,7 +88,6 @@ else:
     
     df_paginado = df.iloc[(st.session_state.page-1)*ITENS : st.session_state.page*ITENS]
     
-    # Agrupamento por Professor e Data
     for (prof, data), grupo in df_paginado.groupby(['Professor', 'Data da Aula'], sort=False):
         st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data}")
         for i, row in grupo.iterrows():
@@ -94,7 +97,7 @@ else:
                 if st.button("💡 Gerar 3 exemplos", key=f"ex_{i}"):
                     st.write(chamar_gemini(row['Como Falar Corretamente'], row['Explicação e Dica de Estudo']))
 
-    # BOTÕES DE PAGINAÇÃO NA BASE
+    # BOTÕES DE PAGINAÇÃO
     cols = st.columns([1, 2, 1])
     if st.session_state.page > 1 and cols[0].button("⏪ Anterior"):
         st.session_state.page -= 1

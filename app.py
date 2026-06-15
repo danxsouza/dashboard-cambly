@@ -12,8 +12,9 @@ from bs4 import BeautifulSoup
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
-# --- LEMBRETE: COLOQUE A SUA URL AQUI NOVAMENTE ---
+# --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
 URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
+# (A chave do Gemini agora está segura no Streamlit Secrets!)
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -37,8 +38,7 @@ def carregar_dados():
         st.error(f"Ocorreu um erro ao conectar à base de dados: {e}")
         return pd.DataFrame()
 
-# Nova função para ler o blog do Cambridge
-@st.cache_data(ttl=3600) # Atualiza a cada 1 hora para não pesar o site
+@st.cache_data(ttl=3600) 
 def buscar_novas_palavras_cambridge():
     url = "https://dictionaryblog.cambridge.org/category/new-words/"
     palavras = []
@@ -47,29 +47,38 @@ def buscar_novas_palavras_cambridge():
         resposta = requests.get(url, headers=headers)
         soup = BeautifulSoup(resposta.text, 'html.parser')
         
-        # Procura as postagens no blog
-        artigos = soup.find_all('article', limit=5)
+        artigos = soup.find_all('article', limit=3)
         for artigo in artigos:
             titulo_tag = artigo.find(['h1', 'h2'], class_=['entry-title', 'title'])
             if titulo_tag and titulo_tag.find('a'):
                 titulo = titulo_tag.text.strip()
                 link = titulo_tag.find('a')['href']
                 
-                # Tenta pegar um pequeno resumo
                 conteudo_tag = artigo.find('div', class_='entry-content')
                 resumo = conteudo_tag.text.strip()[:150] + "..." if conteudo_tag else ""
                 
                 palavras.append({"titulo": titulo, "link": link, "resumo": resumo})
                 
-        # Fallback caso a estrutura mude
         if not palavras:
-            links = soup.select('.entry-title a')[:5]
+            links = soup.select('.entry-title a')[:3]
             for a in links:
                 palavras.append({"titulo": a.text.strip(), "link": a['href'], "resumo": ""})
                 
         return palavras
     except Exception as e:
         return []
+
+def chamar_gemini(frase, dica):
+    # A chave é puxada diretamente do cofre seguro do Streamlit
+    chave_api = st.secrets["GEMINI_API_KEY"]
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" + chave_api
+    prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos em inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    try:
+        r = requests.post(url, json=payload)
+        return r.json()['candidates'][0]['content']['parts'][0]['text']
+    except:
+        return "Não foi possível gerar os exemplos no momento."
 
 df = carregar_dados()
 df_original = df.copy() 
@@ -151,10 +160,8 @@ else:
             professores_vistos = ", ".join(df["Professor"].unique())
             st.metric("Professor(es)", professores_vistos)
 
-        # --- NOVA SEÇÃO: NEW WORDS CAMBRIDGE ---
         st.markdown("---")
         st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
-        st.write("Expanda seu vocabulário com as últimas tendências da língua inglesa analisadas por especialistas.")
         
         novas_palavras = buscar_novas_palavras_cambridge()
         
@@ -166,7 +173,7 @@ else:
         else:
             st.info("Não foi possível buscar as novas palavras no momento.")
             
-        st.markdown("🔗 **[Acessar a página oficial do New Words - Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
+        st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes")
@@ -239,25 +246,47 @@ else:
                 for index, row in df_prof.iterrows():
                     with st.expander(f"📖 {row['Frase com Erro']}"):
                         frase_correta = row['Como Falar Corretamente']
+                        dica_estudo = row['Explicação e Dica de Estudo']
                         texto_url = urllib.parse.quote(frase_correta)
                         link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                         link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                         
                         st.success(f"**Como falar corretamente:** {frase_correta}")
-                        st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                        st.info(f"**Dica de Estudo:** {dica_estudo}")
                         st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        
+                        chave_sessao = f"exemplos_cal_{index}"
+                        if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
+                            with st.spinner("Conectando à IA para gerar os exemplos..."):
+                                st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
+                        
+                        if chave_sessao in st.session_state:
+                            st.markdown("---")
+                            st.markdown(st.session_state[chave_sessao])
+                            
                         st.caption(f"Data: {row['Data da Aula']} | Categoria: {row['Tipo de Erro']} | Arquivo: {row['Arquivo de Origem']}")
         else:
             for index, row in df_paginado.iterrows():
                 titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
                 with st.expander(titulo_expander):
                     frase_correta = row['Como Falar Corretamente']
+                    dica_estudo = row['Explicação e Dica de Estudo']
                     
                     texto_url = urllib.parse.quote(frase_correta)
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                     
                     st.success(f"**Como falar corretamente:** {frase_correta}")
-                    st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                    st.info(f"**Dica de Estudo:** {dica_estudo}")
                     st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    
+                    chave_sessao = f"exemplos_list_{index}"
+                    if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
+                        with st.spinner("Conectando à IA para gerar os exemplos..."):
+                            st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
+                    
+                    if chave_sessao in st.session_state:
+                        st.markdown("---")
+                        st.markdown(st.session_state[chave_sessao])
+                        
                     st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

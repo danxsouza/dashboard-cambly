@@ -26,11 +26,7 @@ def carregar_dados():
         df = pd.DataFrame(data)
         
         if not df.empty:
-            # 1. Converte a coluna de data de texto (DD-MM-YYYY) para formato de Data Real de Calendário
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
-            
-            # 2. Extrai o nome do professor do nome do arquivo (ex: 12-06-2026-elie.pdf -> elie)
-            # O Regex abaixo pega tudo que está depois da data e antes do .pdf
             df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.pdf', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
             
@@ -61,33 +57,26 @@ st.sidebar.header("📅 Filtros de Aula")
 if df.empty:
     st.warning("Ainda não há dados processados para apresentar. Coloque os PDFs no Drive e clique em Processar!")
 else:
-    # --- NOVO: LÓGICA DO CALENDÁRIO E PROFESSOR ---
     modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
     
     if modo_visualizacao == "Escolher Data no Calendário":
-        # Pega a data mais recente para deixar como padrão no calendário
         data_padrao = df['Data Real'].max()
         data_selecionada = st.sidebar.date_input("Selecione o dia da aula", value=data_padrao)
         df = df[df["Data Real"] == data_selecionada]
     
     st.sidebar.markdown("---")
     
-    # Filtro de Professores dinâmico baseado no que restou no dataframe
     professores_disponiveis = df['Professor'].unique().tolist()
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
     if professor_selecionado != "Todos":
         df = df[df["Professor"] == professor_selecionado]
 
-    # --- FIM DOS FILTROS ---
-    
     st.write("Acompanhe sua evolução, identifique padrões e escute como os nativos falam.")
     
-    # Verifica se o dataframe não ficou vazio após os filtros
     if df.empty:
         st.info("Nenhum erro encontrado para os filtros selecionados (Data/Professor).")
     else:
-        # Cartões de Resumo
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Total de Erros (Filtro)", len(df))
@@ -135,7 +124,8 @@ else:
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                     
-                    st.markdown(f"- ❌ **Você disse:** {frase_errada} *(com {professor})*")
+                    # Destaque do professor adicionado aqui
+                    st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor}]**")
                     st.markdown(f"  ✅ **O certo é:** {frase_correta}")
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
@@ -144,7 +134,11 @@ else:
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         for index, row in df.iterrows():
-            with st.expander(f"📖 {row['Frase com Erro']}"):
+            
+            # --- MUDANÇA PRINCIPAL AQUI: A BADGE COM O NOME DO PROFESSOR NO TÍTULO ---
+            titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [👨‍🏫 {row['Professor']}]"
+            
+            with st.expander(titulo_expander):
                 frase_correta = row['Como Falar Corretamente']
                 
                 texto_url = urllib.parse.quote(frase_correta)
@@ -154,4 +148,4 @@ else:
                 st.success(f"**Como falar corretamente:** {frase_correta}")
                 st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
                 st.markdown(f"**Ouça nativos falando a versão correta:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
-                st.caption(f"Professor: {row['Professor']} | Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
+                st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

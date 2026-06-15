@@ -164,4 +164,35 @@ else:
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         
-        if modo_visualizacao == "Escolher Data no Calend
+        if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
+            professores_do_periodo = df['Professor'].unique()
+            for prof in professores_do_periodo:
+                st.markdown(f"### 👨‍🏫 Aulas com {prof}")
+                df_prof = df[df['Professor'] == prof]
+                
+                for index, row in df_prof.iterrows():
+                    with st.expander(f"📖 {row['Frase com Erro']}"):
+                        frase_correta = row['Como Falar Corretamente']
+                        texto_url = urllib.parse.quote(frase_correta)
+                        link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                        link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        
+                        st.success(f"**Como falar corretamente:** {frase_correta}")
+                        st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                        st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        # Adicionei a Data aqui para ficar claro quando ocorreram, já que é um intervalo de dias
+                        st.caption(f"Data: {row['Data da Aula']} | Categoria: {row['Tipo de Erro']} | Arquivo: {row['Arquivo de Origem']}")
+        else:
+            for index, row in df.iterrows():
+                titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+                with st.expander(titulo_expander):
+                    frase_correta = row['Como Falar Corretamente']
+                    
+                    texto_url = urllib.parse.quote(frase_correta)
+                    link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                    link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                    
+                    st.success(f"**Como falar corretamente:** {frase_correta}")
+                    st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                    st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

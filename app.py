@@ -6,6 +6,8 @@ import gspread
 import requests
 import urllib.parse
 from datetime import datetime
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud, STOPWORDS
 
 # Configuração da página Web
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
@@ -83,7 +85,6 @@ else:
         dias_com_aula = df_original['Data Real'].unique()
         dias_no_periodo = sorted([d for d in dias_com_aula if data_inicio <= d <= data_fim], reverse=True)
         
-        # --- ATUALIZAÇÃO 1: MOSTRAR PROFESSORES NA LISTA DE DATAS ---
         if dias_no_periodo:
             for d in dias_no_periodo:
                 profs_deste_dia = df_original[df_original['Data Real'] == d]['Professor'].unique()
@@ -111,15 +112,67 @@ else:
         with col1:
             st.metric("Total de Erros (Filtro)", len(df))
         with col2:
-            erro_comum = df["Tipo de Erro"].mode()[0]
+            erro_comum = df["Tipo de Erro"].mode()[0] if not df["Tipo de Erro"].empty else "N/A"
             st.metric("Categoria Mais Frequente", erro_comum)
         with col3:
             professores_vistos = ", ".join(df["Professor"].unique())
             st.metric("Professor(es)", professores_vistos)
 
-        st.subheader("Distribuição de Erros")
-        contagem_erros = df['Tipo de Erro'].value_counts()
-        st.bar_chart(contagem_erros)
+        # --- NOVA SEÇÃO: NUVENS DE PALAVRAS ---
+        st.markdown("---")
+        st.subheader("☁️ Nuvens de Palavras (Principais Conceitos Errados)")
+        st.write("As palavras maiores representam os conceitos que você mais tem errado nas aulas filtradas (Top 20 palavras).")
+        
+        tab_gram, tab_vocab, tab_past = st.tabs(["📘 Gramática", "📝 Vocabulário", "⏳ Gramática (Passado)"])
+        
+        def gerar_nuvem_palavras(textos, cor_fundo="white", cor_mapa="viridis"):
+            if not textos:
+                st.info("Não há erros suficientes nesta categoria para gerar a nuvem.")
+                return
+            
+            texto_completo = " ".join(textos).lower()
+            
+            # Filtro inteligente de palavras em português e inglês para destacar apenas conceitos reais
+            palavras_ignoradas = set(STOPWORDS)
+            palavras_ignoradas.update([
+                "o", "a", "os", "as", "um", "uma", "de", "do", "da", "em", "no", "na", "para", "com", "que", "é", "isso",
+                "mais", "mas", "como", "por", "sua", "seu", "se", "não", "ao", "aos", "à", "às", "pelo", "pela", "ou", "e",
+                "esse", "essa", "este", "esta", "você", "ele", "ela", "eles", "elas", "nós", "meu", "minha", "ser", "tem",
+                "ter", "fazer", "quando", "aqui", "ali", "lá", "quem", "qual", "muito", "pouco", "tudo", "nada", "sempre",
+                "nunca", "já", "ainda", "agora", "depois", "antes", "então", "assim", "apenas", "mesmo", "outra", "outro",
+                "algum", "alguma", "nenhum", "cada", "qualquer", "porque", "uso", "usar", "usado", "deve", "estar", "verbo",
+                "palavra", "expressão", "frase", "vez", "vezes", "exemplo", "forma", "correta", "correto", "dizer", "falar",
+                "inglês", "português", "significa", "devemos", "podemos", "usa", "usamos", "tradução", "literal", "além", "disso",
+                "invés", "contexto", "geralmente"
+            ])
+            
+            # Cria a nuvem com no máximo 20 palavras
+            wordcloud = WordCloud(
+                width=800, height=350, 
+                background_color=cor_fundo, 
+                stopwords=palavras_ignoradas, 
+                max_words=20,
+                colormap=cor_mapa
+            ).generate(texto_completo)
+            
+            fig, ax = plt.subplots(figsize=(10, 4.5))
+            ax.imshow(wordcloud, interpolation='bilinear')
+            ax.axis("off")
+            st.pyplot(fig)
+
+        with tab_gram:
+            textos_gram = df[df['Tipo de Erro'] == 'Gramática']['Explicação e Dica de Estudo'].tolist()
+            gerar_nuvem_palavras(textos_gram, cor_mapa="Blues")
+
+        with tab_vocab:
+            textos_vocab = df[df['Tipo de Erro'] == 'Vocabulário']['Explicação e Dica de Estudo'].tolist()
+            gerar_nuvem_palavras(textos_vocab, cor_mapa="Greens")
+
+        with tab_past:
+            # Filtro especial: Pega os erros de Gramática que contêm as palavras chave de passado
+            filtro_passado = df['Explicação e Dica de Estudo'].str.contains(r'passado|past|was|were|did|\bed\b', case=False, na=False)
+            textos_passado = df[(df['Tipo de Erro'] == 'Gramática') & filtro_passado]['Explicação e Dica de Estudo'].tolist()
+            gerar_nuvem_palavras(textos_passado, cor_mapa="magma")
 
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes")
@@ -160,26 +213,22 @@ else:
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
 
-        # --- ATUALIZAÇÃO 2: HISTÓRICO COMPLETO COM PAGINAÇÃO ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         
-        # Lógica matemática da paginação
         ITENS_POR_PAGINA = 20
         total_linhas = len(df)
         total_paginas = (total_linhas - 1) // ITENS_POR_PAGINA + 1
         
-        # Só exibe o controle de página se houver mais de uma página
         if total_paginas > 1:
             col_pag1, col_pag2 = st.columns([1, 4])
             with col_pag1:
                 pagina_atual = st.number_input("Página:", min_value=1, max_value=total_paginas, value=1, step=1)
             with col_pag2:
-                st.write("") # Cria um espaçamento para alinhar verticalmente
+                st.write("")
                 st.write("")
                 st.caption(f"Exibindo itens {(pagina_atual - 1) * ITENS_POR_PAGINA + 1} a {min(pagina_atual * ITENS_POR_PAGINA, total_linhas)} de {total_linhas} correções.")
             
-            # Corta o dataframe para exibir apenas os 20 daquela página
             inicio = (pagina_atual - 1) * ITENS_POR_PAGINA
             fim = inicio + ITENS_POR_PAGINA
             df_paginado = df.iloc[inicio:fim]
@@ -187,7 +236,6 @@ else:
             df_paginado = df
             st.caption(f"Exibindo todas as {total_linhas} correções.")
 
-        # Usa o 'df_paginado' em vez do 'df' completo para renderizar os itens abaixo
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
             professores_do_periodo = df_paginado['Professor'].unique()
             for prof in professores_do_periodo:

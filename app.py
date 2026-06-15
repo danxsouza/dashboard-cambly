@@ -63,14 +63,11 @@ else:
     
     if modo_visualizacao == "Escolher Data no Calendário":
         data_padrao = df['Data Real'].max()
-        
-        # --- ATUALIZAÇÃO: CALENDÁRIO COM INTERVALO DE DATAS (RANGE) ---
         data_selecionada = st.sidebar.date_input(
             "Selecione o período (clique no início e depois no fim):", 
-            value=(data_padrao, data_padrao) # Valor padrão é o dia mais recente
+            value=(data_padrao, data_padrao)
         )
         
-        # O Streamlit retorna uma tupla com 1 ou 2 valores dependendo de como o usuário clica
         if isinstance(data_selecionada, tuple):
             if len(data_selecionada) == 2:
                 data_inicio, data_fim = data_selecionada
@@ -86,13 +83,15 @@ else:
         dias_com_aula = df_original['Data Real'].unique()
         dias_no_periodo = sorted([d for d in dias_com_aula if data_inicio <= d <= data_fim], reverse=True)
         
+        # --- ATUALIZAÇÃO 1: MOSTRAR PROFESSORES NA LISTA DE DATAS ---
         if dias_no_periodo:
             for d in dias_no_periodo:
-                st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')}")
+                profs_deste_dia = df_original[df_original['Data Real'] == d]['Professor'].unique()
+                profs_texto = ", ".join(profs_deste_dia)
+                st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')} (com {profs_texto})")
         else:
             st.sidebar.caption("Nenhuma aula encontrada neste período.")
 
-        # Filtra o dataframe usando o intervalo de datas
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
     
     st.sidebar.markdown("---")
@@ -161,14 +160,39 @@ else:
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
 
+        # --- ATUALIZAÇÃO 2: HISTÓRICO COMPLETO COM PAGINAÇÃO ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         
+        # Lógica matemática da paginação
+        ITENS_POR_PAGINA = 20
+        total_linhas = len(df)
+        total_paginas = (total_linhas - 1) // ITENS_POR_PAGINA + 1
+        
+        # Só exibe o controle de página se houver mais de uma página
+        if total_paginas > 1:
+            col_pag1, col_pag2 = st.columns([1, 4])
+            with col_pag1:
+                pagina_atual = st.number_input("Página:", min_value=1, max_value=total_paginas, value=1, step=1)
+            with col_pag2:
+                st.write("") # Cria um espaçamento para alinhar verticalmente
+                st.write("")
+                st.caption(f"Exibindo itens {(pagina_atual - 1) * ITENS_POR_PAGINA + 1} a {min(pagina_atual * ITENS_POR_PAGINA, total_linhas)} de {total_linhas} correções.")
+            
+            # Corta o dataframe para exibir apenas os 20 daquela página
+            inicio = (pagina_atual - 1) * ITENS_POR_PAGINA
+            fim = inicio + ITENS_POR_PAGINA
+            df_paginado = df.iloc[inicio:fim]
+        else:
+            df_paginado = df
+            st.caption(f"Exibindo todas as {total_linhas} correções.")
+
+        # Usa o 'df_paginado' em vez do 'df' completo para renderizar os itens abaixo
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
-            professores_do_periodo = df['Professor'].unique()
+            professores_do_periodo = df_paginado['Professor'].unique()
             for prof in professores_do_periodo:
                 st.markdown(f"### 👨‍🏫 Aulas com {prof}")
-                df_prof = df[df['Professor'] == prof]
+                df_prof = df_paginado[df_paginado['Professor'] == prof]
                 
                 for index, row in df_prof.iterrows():
                     with st.expander(f"📖 {row['Frase com Erro']}"):
@@ -180,10 +204,9 @@ else:
                         st.success(f"**Como falar corretamente:** {frase_correta}")
                         st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
                         st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
-                        # Adicionei a Data aqui para ficar claro quando ocorreram, já que é um intervalo de dias
                         st.caption(f"Data: {row['Data da Aula']} | Categoria: {row['Tipo de Erro']} | Arquivo: {row['Arquivo de Origem']}")
         else:
-            for index, row in df.iterrows():
+            for index, row in df_paginado.iterrows():
                 titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
                 with st.expander(titulo_expander):
                     frase_correta = row['Como Falar Corretamente']

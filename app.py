@@ -6,10 +6,10 @@ import gspread
 import requests
 
 # Configuração da página Web
-st.set_page_config(page_title="O Meu Dashboard de Inglês", layout="wide")
+st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
-# --- NOVO: URL do Google Apps Script ---
+# --- LEMBRETE: COLOQUE A SUA URL AQUI NOVAMENTE ---
 URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
 
 @st.cache_data(ttl=60)
@@ -23,21 +23,20 @@ def carregar_dados():
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
-        st.error(f"Ocorreu um erro ao ligar à base de dados: {e}")
+        st.error(f"Ocorreu um erro ao conectar à base de dados: {e}")
         return pd.DataFrame()
 
 df = carregar_dados()
 
-# --- NOVO: Menu e Botão de Processamento ---
 st.sidebar.header("⚙️ Ações")
 if st.sidebar.button("🚀 Processar Novos PDFs"):
-    with st.spinner("Lendo PDFs e acionando a Inteligência Artificial... Aguarde, isso pode levar 1 ou 2 minutos."):
+    with st.spinner("Lendo PDFs e acionando a Inteligência Artificial... Aguarde."):
         try:
             resposta = requests.get(URL_APPS_SCRIPT)
             if "Sucesso" in resposta.text:
                 st.sidebar.success("Concluído! Atualizando o dashboard...")
-                st.cache_data.clear() # Força o site a ler a planilha novamente
-                st.rerun() # Recarrega a tela automaticamente
+                st.cache_data.clear() 
+                st.rerun() 
             else:
                 st.sidebar.error("Erro. O Apps Script retornou uma falha.")
         except Exception as e:
@@ -55,7 +54,7 @@ else:
     if data_selecionada != "Todas as Aulas":
         df = df[df["Data da Aula"] == data_selecionada]
         
-    st.write("Acompanha a tua evolução e deteta os padrões dos teus erros mais frequentes.")
+    st.write("Acompanhe sua evolução e foque no que mais precisa de atenção.")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -69,9 +68,39 @@ else:
     contagem_erros = df['Tipo de Erro'].value_counts()
     st.bar_chart(contagem_erros)
 
-    st.subheader("Detalhe das Frases a Corrigir")
+    # --- NOVA SEÇÃO: TOP ERROS RECORRENTES ---
+    st.markdown("---")
+    st.subheader("🔥 Top Erros Mais Recorrentes")
+    st.write("Identifique os padrões que mais se repetem. Use o controle abaixo para expandir o ranking de 5 até 10 erros.")
+    
+    top_n = st.slider("Mostrar top:", min_value=5, max_value=10, value=5)
+    
+    # Agrupa pelas dicas para encontrar repetições
+    erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
+    erros_frequentes.columns = ['Explicação', 'Quantidade']
+    top_erros = erros_frequentes.head(top_n)
+    
+    for index, row in top_erros.iterrows():
+        qtd = row['Quantidade']
+        exp = row['Explicação']
+        
+        # Busca as frases exatas que geraram essa mesma dica
+        frases = df[df['Explicação e Dica de Estudo'] == exp]['Frase com Erro'].tolist()
+        
+        icone = "🔥" if qtd > 1 else "⚠️"
+        vezes = "vezes" if qtd > 1 else "vez"
+        
+        with st.expander(f"{icone} {qtd} {vezes} - {exp[:70]}..."):
+            st.info(f"**Explicação Completa:** {exp}")
+            st.write("**Frases onde você cometeu este erro:**")
+            for f in frases:
+                st.write(f"- ❌ {f}")
+
+    # --- SEÇÃO ANTIGA: HISTÓRICO COMPLETO ---
+    st.markdown("---")
+    st.subheader("📚 Histórico Completo de Correções")
     for index, row in df.iterrows():
-        with st.expander(f"⚠️ {row['Frase com Erro']}"):
+        with st.expander(f"📖 {row['Frase com Erro']}"):
             st.success(f"**Como falar corretamente:** {row['Como Falar Corretamente']}")
             st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
             st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

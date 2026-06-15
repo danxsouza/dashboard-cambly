@@ -118,10 +118,14 @@ else:
             professores_vistos = ", ".join(df["Professor"].unique())
             st.metric("Professor(es)", professores_vistos)
 
-        # --- NOVA SEÇÃO: NUVENS DE PALAVRAS ---
+        st.subheader("Distribuição de Erros")
+        contagem_erros = df['Tipo de Erro'].value_counts()
+        st.bar_chart(contagem_erros)
+
+        # --- NUVENS DE PALAVRAS COM FILTRO DE SUPER STOPWORDS ---
         st.markdown("---")
-        st.subheader("☁️ Nuvens de Palavras (Principais Conceitos Errados)")
-        st.write("As palavras maiores representam os conceitos que você mais tem errado nas aulas filtradas (Top 20 palavras).")
+        st.subheader("☁️ Nuvens de Palavras (Foco em Inglês e Gramática)")
+        st.write("Identifique visualmente quais conceitos gramaticais ou palavras em inglês você mais precisa treinar.")
         
         tab_gram, tab_vocab, tab_past = st.tabs(["📘 Gramática", "📝 Vocabulário", "⏳ Gramática (Passado)"])
         
@@ -132,21 +136,49 @@ else:
             
             texto_completo = " ".join(textos).lower()
             
-            # Filtro inteligente de palavras em português e inglês para destacar apenas conceitos reais
+            # Filtro gigante para remover "lixo" explicativo em PT e EN
             palavras_ignoradas = set(STOPWORDS)
             palavras_ignoradas.update([
-                "o", "a", "os", "as", "um", "uma", "de", "do", "da", "em", "no", "na", "para", "com", "que", "é", "isso",
-                "mais", "mas", "como", "por", "sua", "seu", "se", "não", "ao", "aos", "à", "às", "pelo", "pela", "ou", "e",
-                "esse", "essa", "este", "esta", "você", "ele", "ela", "eles", "elas", "nós", "meu", "minha", "ser", "tem",
-                "ter", "fazer", "quando", "aqui", "ali", "lá", "quem", "qual", "muito", "pouco", "tudo", "nada", "sempre",
-                "nunca", "já", "ainda", "agora", "depois", "antes", "então", "assim", "apenas", "mesmo", "outra", "outro",
-                "algum", "alguma", "nenhum", "cada", "qualquer", "porque", "uso", "usar", "usado", "deve", "estar", "verbo",
-                "palavra", "expressão", "frase", "vez", "vezes", "exemplo", "forma", "correta", "correto", "dizer", "falar",
-                "inglês", "português", "significa", "devemos", "podemos", "usa", "usamos", "tradução", "literal", "além", "disso",
-                "invés", "contexto", "geralmente"
+                # Genéricas Português
+                "o", "a", "os", "as", "um", "uma", "uns", "umas", "de", "do", "da", "dos", "das", 
+                "em", "no", "na", "nos", "nas", "para", "com", "por", "que", "se", "não", "sim", 
+                "é", "são", "foi", "foram", "era", "eram", "seria", "seriam", "vai", "vão", "vamos", 
+                "iria", "iriam", "quer", "queremos", "ao", "aos", "à", "às", "pelo", "pela", "pelos", 
+                "pelas", "num", "numa", "neste", "nesta", "nesse", "nessa", "naquele", "naquela", 
+                "seu", "sua", "seus", "suas", "meu", "minha", "teu", "tua", "nosso", "nossa", "nós", 
+                "eles", "elas", "ele", "ela", "você", "vocês", "eu", "isso", "isto", "aquilo", 
+                # Termos de explicação AI
+                "frase", "erro", "dica", "estudo", "inglês", "português", "exemplo", "correto", 
+                "correta", "forma", "dizer", "falar", "substituir", "usar", "usado", "uso", "vez", 
+                "significa", "contexto", "caso", "pois", "porque", "como", "quando", "onde", "quem", 
+                "qual", "melhor", "mais", "menos", "muito", "pouco", "sempre", "nunca", "geralmente", 
+                "apenas", "também", "então", "assim", "agora", "depois", "antes", "já", "ainda", 
+                "mesmo", "outro", "outra", "algum", "alguma", "nenhum", "nenhuma", "todo", "toda", 
+                "tudo", "nada", "cada", "qualquer", "pode", "podemos", "deve", "devemos", "ter", "tem", 
+                "temos", "ser", "sendo", "estar", "estamos", "fazer", "fazemos", "dizemos", "saber", 
+                "achar", "pensar", "ver", "olhar", "parecer", "deixar", "ficar", "passar", "chegar", 
+                "levar", "trazer", "pedir", "perguntar", "responder", "explicar", "entender", "lembrar", 
+                "esquecer", "tentar", "conseguir", "começar", "terminar", "continuar", "parar", 
+                "precisar", "ajudar", "usando", "maneira", "modo", "vezes", "diferença", "comum", 
+                "natural", "nativos", "soa", "soar", "cometer", "atenção", "cuidado", "lembre", 
+                "note", "notar", "perceber", "ideia", "sentido", "significado", "tradução", "literal", 
+                "literalmente", "palavra", "palavras", "expressão", "expressões", "frases", "texto", 
+                "conversa", "aula", "professor", "aluno", "estudante", "aprender", "ensinar", "praticar", 
+                "treinar", "melhorar", "corrigir", "correção", "dicas", "regras", "regra", "exceção", 
+                "situação", "situações", "casos", "invés", "lugar", "existe", "existem", 
+                "costuma", "costumam", "certo", "errado", "errada", "algo", "alguém", "deveria",
+                # Genéricas Inglês (Para destacar os verbos/palavras difíceis, removemos as básicas)
+                "the", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on", 
+                "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", 
+                "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", 
+                "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", 
+                "can", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your", 
+                "some", "them", "see", "other", "than", "then", "now", "look", "only", "come", "its", 
+                "over", "also", "back", "after", "use", "two", "how", "our", "work", "first", "well", 
+                "way", "even", "new", "want", "because", "any", "these", "give", "day", "most", "us", 
+                "is", "are", "am", "be", "been", "being"
             ])
             
-            # Cria a nuvem com no máximo 20 palavras
             wordcloud = WordCloud(
                 width=800, height=350, 
                 background_color=cor_fundo, 
@@ -160,18 +192,24 @@ else:
             ax.axis("off")
             st.pyplot(fig)
 
+        # Aba 1: Nuvem de Gramática (Pega a explicação e a frase correta para mostrar os termos e a gramática inglesa correta)
         with tab_gram:
-            textos_gram = df[df['Tipo de Erro'] == 'Gramática']['Explicação e Dica de Estudo'].tolist()
+            df_gram = df[df['Tipo de Erro'].str.contains('Gramática', case=False, na=False)]
+            textos_gram = df_gram['Explicação e Dica de Estudo'].tolist() + df_gram['Como Falar Corretamente'].tolist()
             gerar_nuvem_palavras(textos_gram, cor_mapa="Blues")
 
+        # Aba 2: Nuvem de Vocabulário
         with tab_vocab:
-            textos_vocab = df[df['Tipo de Erro'] == 'Vocabulário']['Explicação e Dica de Estudo'].tolist()
+            df_vocab = df[df['Tipo de Erro'].str.contains('Vocabulário', case=False, na=False)]
+            textos_vocab = df_vocab['Explicação e Dica de Estudo'].tolist() + df_vocab['Como Falar Corretamente'].tolist()
             gerar_nuvem_palavras(textos_vocab, cor_mapa="Greens")
 
+        # Aba 3: Nuvem do Passado
         with tab_past:
-            # Filtro especial: Pega os erros de Gramática que contêm as palavras chave de passado
+            # Filtro inteligente: Busca erros categorizados como Gramática que mencionam termos de passado
             filtro_passado = df['Explicação e Dica de Estudo'].str.contains(r'passado|past|was|were|did|\bed\b', case=False, na=False)
-            textos_passado = df[(df['Tipo de Erro'] == 'Gramática') & filtro_passado]['Explicação e Dica de Estudo'].tolist()
+            df_past = df[df['Tipo de Erro'].str.contains('Gramática', case=False, na=False) & filtro_passado]
+            textos_passado = df_past['Explicação e Dica de Estudo'].tolist() + df_past['Como Falar Corretamente'].tolist()
             gerar_nuvem_palavras(textos_passado, cor_mapa="magma")
 
         st.markdown("---")

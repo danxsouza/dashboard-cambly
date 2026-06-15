@@ -29,8 +29,6 @@ def carregar_dados():
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
             df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.pdf', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
-            
-            # Ordena os dados do mais recente para o mais antigo
             df = df.sort_values(by="Data Real", ascending=False)
             
         return df
@@ -39,6 +37,7 @@ def carregar_dados():
         return pd.DataFrame()
 
 df = carregar_dados()
+df_original = df.copy() # Guarda os dados totais para a listagem lateral
 
 st.sidebar.header("⚙️ Ações")
 if st.sidebar.button("🚀 Processar Novos PDFs"):
@@ -60,26 +59,18 @@ st.sidebar.header("📅 Filtros de Aula")
 if df.empty:
     st.warning("Ainda não há dados processados para apresentar. Coloque os PDFs no Drive e clique em Processar!")
 else:
-    modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Aula Específica"])
+    modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
     
-    if modo_visualizacao == "Escolher Aula Específica":
+    if modo_visualizacao == "Escolher Data no Calendário":
+        data_padrao = df['Data Real'].max()
+        data_selecionada = st.sidebar.date_input("Selecione o dia da aula", value=data_padrao)
         
-        # --- NOVA LÓGICA: LISTA INTELIGENTE DE DATAS ---
-        # Agrupa para não repetir o mesmo dia, mantendo a ordem da data mais recente
-        dias_com_aula = df.groupby('Data Real', sort=False)['Professor'].unique().reset_index()
-        
-        opcoes_dropdown = []
-        mapa_datas = {}
-        
-        for index, row in dias_com_aula.iterrows():
-            data_formatada = row['Data Real'].strftime("%d/%m/%Y")
-            profs = ", ".join(row['Professor'])
-            texto_opcao = f"📅 {data_formatada} (com {profs})"
-            opcoes_dropdown.append(texto_opcao)
-            mapa_datas[texto_opcao] = row['Data Real'] # Salva a data real no fundo para o filtro funcionar
-            
-        opcao_selecionada = st.sidebar.selectbox("Selecione a data disponível:", opcoes_dropdown)
-        data_selecionada = mapa_datas[opcao_selecionada]
+        # --- SOLUÇÃO PARA A LIMITAÇÃO DO CALENDÁRIO ---
+        st.sidebar.caption("💡 **Datas com aulas registradas:**")
+        dias_com_aula = df_original['Data Real'].unique()
+        for d in dias_com_aula:
+            st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')}")
+
         df = df[df["Data Real"] == data_selecionada]
     
     st.sidebar.markdown("---")
@@ -109,10 +100,9 @@ else:
         contagem_erros = df['Tipo de Erro'].value_counts()
         st.bar_chart(contagem_erros)
 
-        # --- TOP ERROS RECORRENTES ---
+        # --- TOP ERROS RECORRENTES (Agora com o professor no título) ---
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes")
-        st.write("Identifique os padrões que mais se repetem. Use o controle abaixo para expandir o ranking de 5 até 10 erros.")
         
         top_n = st.slider("Mostrar top:", min_value=5, max_value=10, value=5)
         
@@ -126,10 +116,15 @@ else:
             
             linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
             
+            # Pegando todos os professores que presenciaram esse erro
+            profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
+            
             icone = "🔥" if qtd > 1 else "⚠️"
             vezes = "vezes" if qtd > 1 else "vez"
             
-            with st.expander(f"{icone} {qtd} {vezes} - {exp[:70]}..."):
+            titulo_top = f"[{profs_envolvidos}] {icone} {qtd} {vezes} - {exp[:60]}..."
+            
+            with st.expander(titulo_top):
                 st.info(f"**Explicação Completa:** {exp}")
                 st.write("**Exemplos onde você cometeu este erro:**")
                 
@@ -147,19 +142,39 @@ else:
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
 
-        # --- HISTÓRICO COMPLETO ---
+        # --- HISTÓRICO COMPLETO (Separado por professor se tiver data escolhida) ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
-        for index, row in df.iterrows():
-            titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [👨‍🏫 {row['Professor']}]"
-            with st.expander(titulo_expander):
-                frase_correta = row['Como Falar Corretamente']
+        
+        if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
+            professores_do_dia = df['Professor'].unique()
+            for prof in professores_do_dia:
+                st.markdown(f"### 👨‍🏫 Aula com {prof}")
+                df_prof = df[df['Professor'] == prof]
                 
-                texto_url = urllib.parse.quote(frase_correta)
-                link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
-                link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
-                
-                st.success(f"**Como falar corretamente:** {frase_correta}")
-                st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
-                st.markdown(f"**Ouça nativos falando a versão correta:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
-                st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
+                for index, row in df_prof.iterrows():
+                    with st.expander(f"📖 {row['Frase com Erro']}"):
+                        frase_correta = row['Como Falar Corretamente']
+                        texto_url = urllib.parse.quote(frase_correta)
+                        link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                        link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        
+                        st.success(f"**Como falar corretamente:** {frase_correta}")
+                        st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                        st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        st.caption(f"Categoria: {row['Tipo de Erro']} | Arquivo: {row['Arquivo de Origem']}")
+        else:
+            # Mantém a listagem padrão se for "Todas as Aulas" ou filtro único
+            for index, row in df.iterrows():
+                titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+                with st.expander(titulo_expander):
+                    frase_correta = row['Como Falar Corretamente']
+                    
+                    texto_url = urllib.parse.quote(frase_correta)
+                    link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                    link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                    
+                    st.success(f"**Como falar corretamente:** {frase_correta}")
+                    st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+                    st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

@@ -14,7 +14,6 @@ st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
 URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
-# (A chave do Gemini agora está segura no Streamlit Secrets!)
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -69,7 +68,6 @@ def buscar_novas_palavras_cambridge():
         return []
 
 def chamar_gemini(frase, dica):
-    # A chave é puxada diretamente do cofre seguro do Streamlit
     chave_api = st.secrets["GEMINI_API_KEY"]
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" + chave_api
     prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos em inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
@@ -214,29 +212,29 @@ else:
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                     st.write("---")
 
+        # --- NOVA SEÇÃO DE PAGINAÇÃO ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         
         ITENS_POR_PAGINA = 20
         total_linhas = len(df)
-        total_paginas = (total_linhas - 1) // ITENS_POR_PAGINA + 1
+        total_paginas = max(1, (total_linhas - 1) // ITENS_POR_PAGINA + 1)
         
-        if total_paginas > 1:
-            col_pag1, col_pag2 = st.columns([1, 4])
-            with col_pag1:
-                pagina_atual = st.number_input("Página:", min_value=1, max_value=total_paginas, value=1, step=1)
-            with col_pag2:
-                st.write("")
-                st.write("")
-                st.caption(f"Exibindo itens {(pagina_atual - 1) * ITENS_POR_PAGINA + 1} a {min(pagina_atual * ITENS_POR_PAGINA, total_linhas)} de {total_linhas} correções.")
+        # Cria a memória da página atual
+        if 'pagina_atual' not in st.session_state:
+            st.session_state['pagina_atual'] = 1
             
-            inicio = (pagina_atual - 1) * ITENS_POR_PAGINA
-            fim = inicio + ITENS_POR_PAGINA
-            df_paginado = df.iloc[inicio:fim]
-        else:
-            df_paginado = df
-            st.caption(f"Exibindo todas as {total_linhas} correções.")
+        # Garante que a página não quebre se o usuário mudar o filtro lateral
+        if st.session_state['pagina_atual'] > total_paginas:
+            st.session_state['pagina_atual'] = 1
+            
+        inicio = (st.session_state['pagina_atual'] - 1) * ITENS_POR_PAGINA
+        fim = inicio + ITENS_POR_PAGINA
+        df_paginado = df.iloc[inicio:fim]
+        
+        st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} correções.")
 
+        # --- RENDERIZA O HISTÓRICO PRIMEIRO ---
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
             professores_do_periodo = df_paginado['Professor'].unique()
             for prof in professores_do_periodo:
@@ -290,3 +288,26 @@ else:
                         st.markdown(st.session_state[chave_sessao])
                         
                     st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
+
+        # --- BOTÕES DE PAGINAÇÃO (NA PARTE INFERIOR) ---
+        if total_paginas > 1:
+            st.markdown("<br>", unsafe_allow_html=True) # Espaçamento
+            col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([1, 1.5, 2, 1.5, 1])
+            
+            with col_ant:
+                if st.session_state['pagina_atual'] > 1:
+                    if st.button("⏪ Anterior", use_container_width=True):
+                        st.session_state['pagina_atual'] -= 1
+                        st.rerun() # Atualiza a tela
+            with col_pag:
+                # Estilização do contador de páginas
+                st.markdown(
+                    f"<div style='text-align: center; padding: 5px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.3); font-weight: bold; font-size: 16px;'>"
+                    f"Página {st.session_state['pagina_atual']} de {total_paginas}</div>", 
+                    unsafe_allow_html=True
+                )
+            with col_prox:
+                if st.session_state['pagina_atual'] < total_paginas:
+                    if st.button("Próxima ⏩", use_container_width=True):
+                        st.session_state['pagina_atual'] += 1
+                        st.rerun() # Atualiza a tela

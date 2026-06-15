@@ -30,6 +30,9 @@ def carregar_dados():
             df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.pdf', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
             
+            # Ordena os dados do mais recente para o mais antigo
+            df = df.sort_values(by="Data Real", ascending=False)
+            
         return df
     except Exception as e:
         st.error(f"Ocorreu um erro ao conectar à base de dados: {e}")
@@ -57,11 +60,26 @@ st.sidebar.header("📅 Filtros de Aula")
 if df.empty:
     st.warning("Ainda não há dados processados para apresentar. Coloque os PDFs no Drive e clique em Processar!")
 else:
-    modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
+    modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Aula Específica"])
     
-    if modo_visualizacao == "Escolher Data no Calendário":
-        data_padrao = df['Data Real'].max()
-        data_selecionada = st.sidebar.date_input("Selecione o dia da aula", value=data_padrao)
+    if modo_visualizacao == "Escolher Aula Específica":
+        
+        # --- NOVA LÓGICA: LISTA INTELIGENTE DE DATAS ---
+        # Agrupa para não repetir o mesmo dia, mantendo a ordem da data mais recente
+        dias_com_aula = df.groupby('Data Real', sort=False)['Professor'].unique().reset_index()
+        
+        opcoes_dropdown = []
+        mapa_datas = {}
+        
+        for index, row in dias_com_aula.iterrows():
+            data_formatada = row['Data Real'].strftime("%d/%m/%Y")
+            profs = ", ".join(row['Professor'])
+            texto_opcao = f"📅 {data_formatada} (com {profs})"
+            opcoes_dropdown.append(texto_opcao)
+            mapa_datas[texto_opcao] = row['Data Real'] # Salva a data real no fundo para o filtro funcionar
+            
+        opcao_selecionada = st.sidebar.selectbox("Selecione a data disponível:", opcoes_dropdown)
+        data_selecionada = mapa_datas[opcao_selecionada]
         df = df[df["Data Real"] == data_selecionada]
     
     st.sidebar.markdown("---")
@@ -124,7 +142,6 @@ else:
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                     
-                    # Destaque do professor adicionado aqui
                     st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor}]**")
                     st.markdown(f"  ✅ **O certo é:** {frase_correta}")
                     st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
@@ -134,10 +151,7 @@ else:
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções")
         for index, row in df.iterrows():
-            
-            # --- MUDANÇA PRINCIPAL AQUI: A BADGE COM O NOME DO PROFESSOR NO TÍTULO ---
             titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [👨‍🏫 {row['Professor']}]"
-            
             with st.expander(titulo_expander):
                 frase_correta = row['Como Falar Corretamente']
                 

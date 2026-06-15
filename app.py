@@ -4,6 +4,7 @@ import json
 from google.oauth2.service_account import Credentials
 import gspread
 import requests
+import urllib.parse # NOVA FERRAMENTA PARA GERAR LINKS
 
 # Configuração da página Web
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
@@ -68,39 +69,58 @@ else:
     contagem_erros = df['Tipo de Erro'].value_counts()
     st.bar_chart(contagem_erros)
 
-    # --- NOVA SEÇÃO: TOP ERROS RECORRENTES ---
+    # --- TOP ERROS RECORRENTES ---
     st.markdown("---")
     st.subheader("🔥 Top Erros Mais Recorrentes")
     st.write("Identifique os padrões que mais se repetem. Use o controle abaixo para expandir o ranking de 5 até 10 erros.")
     
     top_n = st.slider("Mostrar top:", min_value=5, max_value=10, value=5)
     
-    # Agrupa pelas dicas para encontrar repetições
     erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
     erros_frequentes.columns = ['Explicação', 'Quantidade']
     top_erros = erros_frequentes.head(top_n)
     
-    for index, row in top_erros.iterrows():
-        qtd = row['Quantidade']
-        exp = row['Explicação']
+    for index, row_top in top_erros.iterrows():
+        qtd = row_top['Quantidade']
+        exp = row_top['Explicação']
         
-        # Busca as frases exatas que geraram essa mesma dica
-        frases = df[df['Explicação e Dica de Estudo'] == exp]['Frase com Erro'].tolist()
+        # Filtra todas as linhas originais que tem essa explicação
+        linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
         
         icone = "🔥" if qtd > 1 else "⚠️"
         vezes = "vezes" if qtd > 1 else "vez"
         
         with st.expander(f"{icone} {qtd} {vezes} - {exp[:70]}..."):
             st.info(f"**Explicação Completa:** {exp}")
-            st.write("**Frases onde você cometeu este erro:**")
-            for f in frases:
-                st.write(f"- ❌ {f}")
+            st.write("**Exemplos onde você cometeu este erro:**")
+            
+            for _, row_detalhe in linhas_erro.iterrows():
+                frase_errada = row_detalhe['Frase com Erro']
+                frase_correta = row_detalhe['Como Falar Corretamente']
+                
+                # Gera os links de busca
+                texto_url = urllib.parse.quote(frase_correta)
+                link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                
+                st.markdown(f"- ❌ **Você disse:** {frase_errada}")
+                st.markdown(f"  ✅ **O certo é:** {frase_correta}")
+                st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                st.write("---")
 
-    # --- SEÇÃO ANTIGA: HISTÓRICO COMPLETO ---
+    # --- HISTÓRICO COMPLETO ---
     st.markdown("---")
     st.subheader("📚 Histórico Completo de Correções")
     for index, row in df.iterrows():
         with st.expander(f"📖 {row['Frase com Erro']}"):
-            st.success(f"**Como falar corretamente:** {row['Como Falar Corretamente']}")
+            frase_correta = row['Como Falar Corretamente']
+            
+            # Gera os links de busca
+            texto_url = urllib.parse.quote(frase_correta)
+            link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+            link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+            
+            st.success(f"**Como falar corretamente:** {frase_correta}")
             st.info(f"**Dica de Estudo:** {row['Explicação e Dica de Estudo']}")
+            st.markdown(f"**Ouça nativos falando a versão correta:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
             st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")

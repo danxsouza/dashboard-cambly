@@ -1,8 +1,8 @@
 
+
 streamlit
 pandas
 gspread
 google-auth
 requests
-wordcloud
-matplotlib
+beautifulsoup4

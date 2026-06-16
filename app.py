@@ -18,7 +18,8 @@ URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c
 def carregar_dados():
     try:
         key_dict = json.loads(st.secrets["gcp_service_account"])
-        scopes = ['https://www.googleapis.com/auth/sheets', 'https://www.googleapis.com/auth/drive']
+        # --- CORRIGIDO: Voltando para 'spreadsheets' completo para corrigir a autenticação ---
+        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
         client = gspread.authorize(creds)
         sheet = client.open_by_key("11Cg3acTMwOIZ82L2hn6i5RnV4akuSoAp1u3M-HTxMi0").sheet1
@@ -27,7 +28,6 @@ def carregar_dados():
         
         if not df.empty:
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
-            # Regex corrigido para aceitar TXT maiúsculo ou minúsculo
             df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt|PDF|TXT)', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
             df = df.sort_values(by="Data Real", ascending=False)
@@ -40,7 +40,7 @@ def carregar_dados():
 def chamar_gemini(frase, dica):
     chave_api = st.secrets["GEMINI_API_KEY"]
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" + chave_api
-    prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos em inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
+    prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos in inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
         r = requests.post(url, json=payload)
@@ -121,7 +121,6 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty:
     st.info("Nenhum erro encontrado para os filtros selecionados.")
 else:
-    # MÉTRICAS SIMPLIFICADAS
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Total de Erros Encontrados", len(df))
@@ -129,12 +128,11 @@ else:
         professores_vistos = ", ".join(df["Professor"].unique())
         st.metric("Professor(es) das Aulas", professores_vistos)
 
-    # --- SEÇÃO: ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME DINÂMICO) ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns:
-        # Puxa os dados respeitando estritamente o DataFrame "df" já filtrado
         total_palavras_danilo = pd.to_numeric(df['Palavras Aluno'], errors='coerce').sum()
         total_palavras_tutor = pd.to_numeric(df['Palavras Professor'], errors='coerce').sum()
         
@@ -142,7 +140,6 @@ else:
             minutos_danilo = round(total_palavras_danilo / 140, 1)
             minutos_tutor = round(total_palavras_tutor / 140, 1)
             
-            # Define o nome do rótulo do professor dinamicamente
             nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor"
             
             col_talk1, col_talk2 = st.columns([1, 2])
@@ -152,7 +149,7 @@ else:
             with col_talk2:
                 dados_pizza = pd.DataFrame({
                     "Quem Falou": ["Danilo (Você)", nome_label_prof],
-                    "Minutos": [minutos_danilo, minutos_tutor]
+                    "Minutos": [minutos_danilo, minutes_tutor] if 'minutes_tutor' in locals() else [minutos_danilo, minutos_tutor]
                 })
                 st.vega_lite_chart(dados_pizza, {
                     'mark': {'type': 'arc', 'innerRadius': 40},
@@ -166,7 +163,7 @@ else:
     else:
         st.info("As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
 
-    # --- SEÇÃO: TOP ERROS RECORRENTES ---
+    # --- TOP ERROS RECORRENTES ---
     st.markdown("---")
     if professor_selecionado == "Todos":
         st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
@@ -211,7 +208,7 @@ else:
                 st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                 st.write("---")
 
-    # --- SEÇÃO: HISTÓRICO DE CORREÇÕES FILTRADO ---
+    # --- HISTÓRICO DE CORREÇÕES ---
     st.markdown("---")
     st.subheader("📚 Histórico de Correções Filtrado")
     
@@ -310,6 +307,5 @@ else:
         with col_prox:
             if st.session_state['pagina_atual'] < total_paginas:
                 if st.button("Prox ⏩", use_container_width=True):
-                    st.session_state['pagina_atual'] -= 1
                     st.session_state['pagina_atual'] += 1
                     st.rerun() 

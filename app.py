@@ -12,7 +12,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -26,6 +26,9 @@ def carregar_dados():
         df = pd.DataFrame(data)
         
         if not df.empty:
+            # Remove espaços em branco "invisíveis" dos nomes das colunas
+            df.columns = df.columns.str.strip() 
+            
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
             df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt|PDF|TXT)', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
@@ -68,7 +71,7 @@ st.sidebar.markdown("---")
 
 st.sidebar.header("🎯 Modo de Foco Intensivo")
 opcao_foco = st.sidebar.radio(
-    "Escolha um objective de estudo:",
+    "Escolha um objetivo de estudo:",
     ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"]
 )
 
@@ -109,7 +112,6 @@ else:
         
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
     
-    # --- ATUALIZAÇÃO: FILTRANDO "SEM NOME" DA LISTA DE PROFESSORES ---
     professores_disponiveis = [p for p in df_original['Professor'].unique().tolist() if p and p != "Sem Nome"]
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
@@ -133,8 +135,11 @@ else:
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns:
-        total_palavras_danilo = pd.to_numeric(df['Palavras Aluno'], errors='coerce').sum()
-        total_palavras_tutor = pd.to_numeric(df['Palavras Professor'], errors='coerce').sum()
+        # Pega apenas uma linha de cada arquivo para não duplicar o tempo de fala
+        df_aulas_unicas = df.drop_duplicates(subset=['Arquivo de Origem'])
+        
+        total_palavras_danilo = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0).sum()
+        total_palavras_tutor = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0).sum()
         
         if total_palavras_danilo > 0 or total_palavras_tutor > 0:
             minutos_danilo = round(total_palavras_danilo / 140, 1)
@@ -159,9 +164,9 @@ else:
                     }
                 }, use_container_width=True)
         else:
-            st.info("Nenhum dado de volumetria de áudio encontrado para os filtros selecionados.")
+            st.info("⚠️ Não há contagem de palavras para exibir. Isso pode ocorrer se o arquivo TXT processado não tiver a marcação 'Avatar de Danilo' e 'Avatar de...'.")
     else:
-        st.info("As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
+        st.info("💡 Para visualizar o gráfico, certifique-se de que a sua planilha do Google possui as colunas 'Palavras Aluno' e 'Palavras Professor' na linha 1.")
 
     # --- TOP ERROS RECORRENTES ---
     st.markdown("---")
@@ -290,10 +295,9 @@ else:
                     st.markdown(st.session_state[chave_sessao])
                 st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
-    # --- ATUALIZAÇÃO: BOTÕES DE PAGINAÇÃO APROXIMADOS E CENTRALIZADOS ---
+    # --- BOTÕES DE PAGINAÇÃO COMPACTOS ---
     if total_paginas > 1:
         st.markdown("<br>", unsafe_allow_html=True) 
-        # Modificado proporções das colunas laterais e centrais para juntar os botões
         col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([3.8, 0.8, 1.4, 0.8, 3.8])
         
         with col_ant:

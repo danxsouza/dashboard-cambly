@@ -13,7 +13,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -141,7 +141,7 @@ if df.empty and df_conversacao.empty:
 else:
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total de Erros Encontrados", len(df))
+        st.metric("Total de Itens Encontrados", len(df))
     with col2:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
         st.metric("Professor(es) das Aulas", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
@@ -151,7 +151,9 @@ else:
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
-        df_aulas_unicas = df_conversacao.drop_duplicates(subset=['Arquivo de Origem'])
+        # Pega apenas arquivos que NÃO sejam de chat para calcular a minutagem correta da fala
+        df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].str.contains('-chat-', case=False, na=False)]
+        df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem'])
         
         total_palavras_danilo = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0).sum()
         total_palavras_tutor = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0).sum()
@@ -179,59 +181,58 @@ else:
                     }
                 }, width="stretch")
         else:
-            st.info("⚠️ Não há contagem de palavras registrada para o período ou professor selecionado.")
+            st.info("🎙️ Selecione um período com arquivos de transcrição de áudio para ver o gráfico de Talk Time.")
     else:
         st.info("💡 As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
 
-    # --- ATUALIZAÇÃO: TOP ERROS RECORRENTES (APENAS CONTADOS > 1 E RESPEITANDO OS FILTROS) ---
+    # --- TOP ERROS RECORRENTES ---
     if not df.empty:
-        st.markdown("---")
-        st.subheader("🔥 Top Erros Mais Recorrentes")
+        # Remove as notas de chat do ranking de erros gramaticais recorrentes
+        df_apenas_erros = df[df['Tipo de Erro'] != '💬 Nota do Chat']
         
-        # Baseia-se estritamente na variável 'df' que já está 100% filtrada
-        erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
-        erros_frequentes.columns = ['Explicação', 'Quantidade']
-        
-        # REGRA FILTRO: Mantém estritamente apenas o que aconteceu MAIS de uma vez
-        erros_frequentes = erros_frequentes[erros_frequentes['Quantidade'] > 1]
-        
-        if erros_frequentes.empty:
-            st.info("🎯 Excelente sinal! Não foram encontrados erros repetidos (com mais de uma ocorrência) para os filtros selecionados atualmente.")
-        else:
-            top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
-            top_erros = erros_frequentes.head(top_n)
+        if not df_apenas_erros.empty:
+            st.markdown("---")
+            st.subheader("🔥 Top Erros Mais Recorrentes")
             
-            for index, row_top in top_erros.iterrows():
-                qtd = row_top['Quantidade']
-                exp = row_top['Explicação']
+            erros_frequentes = df_apenas_erros['Explicação e Dica de Estudo'].value_counts().reset_index()
+            erros_frequentes.columns = ['Explicação', 'Quantidade']
+            erros_frequentes = erros_frequentes[erros_frequentes['Quantidade'] > 1]
+            
+            if not erros_frequentes.empty:
+                top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
+                top_erros = erros_frequentes.head(top_n)
                 
-                linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
-                profs_envolvidos = ", ".join([p for p in linhas_erro['Professor'].unique() if p != "Sem Nome"])
-                
-                titulo_top = f"[{profs_envolvidos}] 🔥 {qtd} vezes - {exp[:60]}..."
-                
-                with st.expander(titulo_top):
-                    st.info(f"**Explicação Completa:** {exp}")
-                    for _, row_detalhe in linhas_erro.iterrows():
-                        frase_errada = row_detalhe['Frase com Erro']
-                        frase_correta = row_detalhe['Como Falar Corretamente']
-                        professor = row_detalhe['Professor']
-                        data_aula = row_detalhe['Data da Aula']
-                        
-                        texto_url = urllib.parse.quote(frase_correta)
-                        link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
-                        link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
-                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
-                        
-                        st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
-                        st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                        st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
-                        st.write("---")
+                for index, row_top in top_erros.iterrows():
+                    qtd = row_top['Quantidade']
+                    exp = row_top['Explicação']
+                    
+                    linhas_erro = df_apenas_erros[df_apenas_erros['Explicação e Dica de Estudo'] == exp]
+                    profs_envolvidos = ", ".join([p for p in linhas_erro['Professor'].unique() if p != "Sem Nome"])
+                    
+                    titulo_top = f"[{profs_envolvidos}] 🔥 {qtd} vezes - {exp[:60]}..."
+                    
+                    with st.expander(titulo_top):
+                        st.info(f"**Explicação Completa:** {exp}")
+                        for _, row_detalhe in linhas_erro.iterrows():
+                            frase_errada = row_detalhe['Frase com Erro']
+                            frase_correta = row_detalhe['Como Falar Corretamente']
+                            professor = row_detalhe['Professor']
+                            data_aula = row_detalhe['Data da Aula']
+                            
+                            texto_url = urllib.parse.quote(frase_correta)
+                            link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                            link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                            link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                            
+                            st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
+                            st.markdown(f"  ✅ **O certo é:** {frase_correta}")
+                            st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                            st.write("---")
 
-    # --- HISTÓRICO DE CORREÇÕES ---
+    # --- HISTÓRICO DE CORREÇÕES (DIFERENCIAÇÃO DE ÍCONES AUDIO VS CHAT) ---
     if not df.empty:
         st.markdown("---")
-        st.subheader("📚 Histórico de Correções Filtrado")
+        st.subheader("📚 Histórico de Conteúdo Filtrado")
         
         ITENS_POR_PAGINA = 20
         total_linhas = len(df)
@@ -247,7 +248,7 @@ else:
         fim = inicio + ITENS_POR_PAGINA
         df_paginado = df.iloc[inicio:fim]
         
-        st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} correções.")
+        st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} registros.")
 
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
             grupos_aula = df_paginado[['Professor', 'Data da Aula']].drop_duplicates()
@@ -261,7 +262,11 @@ else:
                 df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
                 
                 for index, row in df_prof.iterrows():
-                    titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}"
+                    # --- NOVO: SELEÇÃO DE EMOJI BASEADO NO TIPO (CHAT VS AUDIO) ---
+                    tipo_erro = row['Tipo de Erro']
+                    emoji_tipo = "💬" if "Chat" in str(tipo_erro) else "📖"
+                    
+                    titulo_expander = f"{emoji_tipo} [{tipo_erro}] {row['Frase com Erro']}"
                     with st.expander(titulo_expander):
                         frase_correta = row['Como Falar Corretamente']
                         dica_estudo = row['Explicação e Dica de Estudo']
@@ -271,23 +276,30 @@ else:
                         link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                         link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                         
-                        st.success(f"**Como falar corretamente:** {frase_correta}")
-                        st.info(f"**Dica de Estudo:** {dica_estudo}")
+                        label_resposta = "Definição / Significado / Aplicação:" if "Chat" in str(tipo_erro) else "Como falar corretamente:"
+                        st.success(f"**{label_resposta}** {frase_correta}")
+                        st.info(f"**Explicação e Exemplos de Apoio:**\n{dica_estudo}")
                         st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                         
-                        chave_sessao = f"exemplos_cal_{index}"
-                        if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
-                            with st.spinner("Gerando exemplos..."):
-                                st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
-                        
-                        if chave_sessao in st.session_state:
-                            st.markdown("---")
-                            st.markdown(st.session_state[chave_sessao])
+                        # Botão extra de IA desativado para notas que já vieram geradas pelo chat
+                        if "Chat" not in str(tipo_erro):
+                            chave_sessao = f"exemplos_cal_{index}"
+                            if st.button("💡 Gerar mais 3 exemplos de uso", key=f"btn_cal_{index}"):
+                                with st.spinner("Gerando exemplos..."):
+                                    st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
+                            if chave_sessao in st.session_state:
+                                st.markdown("---")
+                                st.markdown(st.session_state[chave_sessao])
                         st.caption(f"Origem: {row['Arquivo de Origem']}")
         else:
             for index, row in df_paginado.iterrows():
                 prof_exibicao = row['Professor'] if row['Professor'] != "Sem Nome" else "Tutor"
-                titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{prof_exibicao}]"
+                
+                # --- NOVO: SELEÇÃO DE EMOJI BASEADO NO TIPO (CHAT VS AUDIO) ---
+                tipo_erro = row['Tipo de Erro']
+                emoji_tipo = "💬" if "Chat" in str(tipo_erro) else "📖"
+                
+                titulo_expander = f"{emoji_tipo} [{tipo_erro}] {row['Frase com Erro']}   🏷️ [{prof_exibicao}]"
                 with st.expander(titulo_expander):
                     frase_correta = row['Como Falar Corretamente']
                     dica_estudo = row['Explicação e Dica de Estudo']
@@ -297,18 +309,19 @@ else:
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                     link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                     
-                    st.success(f"**Como falar corretamente:** {frase_correta}")
-                    st.info(f"**Dica de Estudo:** {dica_estudo}")
+                    label_resposta = "Definição / Significado / Aplicação:" if "Chat" in str(tipo_erro) else "Como falar corretamente:"
+                    st.success(f"**{label_resposta}** {frase_correta}")
+                    st.info(f"**Explicação e Exemplos de Apoio:**\n{dica_estudo}")
                     st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     
-                    chave_sessao = f"exemplos_list_{index}"
-                    if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
-                        with st.spinner("Gerando exemplos..."):
-                            st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
-                    
-                    if chave_sessao in st.session_state:
-                        st.markdown("---")
-                        st.markdown(st.session_state[chave_sessao])
+                    if "Chat" not in str(tipo_erro):
+                        chave_sessao = f"exemplos_list_{index}"
+                        if st.button("💡 Gerar mais 3 exemplos de uso", key=f"btn_list_{index}"):
+                            with st.spinner("Gerando exemplos..."):
+                                st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
+                        if chave_sessao in st.session_state:
+                            st.markdown("---")
+                            st.markdown(st.session_state[chave_sessao])
                     st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
         # --- BOTÕES DE PAGINAÇÃO COMPACTOS ---

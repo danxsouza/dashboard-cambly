@@ -6,6 +6,7 @@ import gspread
 import requests
 import urllib.parse
 from datetime import datetime
+import re
 
 # Configuração da página Web
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
@@ -26,12 +27,21 @@ def carregar_dados():
         df = pd.DataFrame(data)
         
         if not df.empty:
-            # Remove espaços em branco "invisíveis" dos nomes das colunas
             df.columns = df.columns.str.strip() 
-            
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
-            df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt|PDF|TXT)', expand=False)
-            df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
+            
+            # --- ATUALIZAÇÃO: Extrator Inteligente de Nomes ---
+            def limpar_nome_professor(arq):
+                if pd.isna(arq): return "Sem Nome"
+                nome = str(arq).strip()
+                nome = re.sub(r'\.(pdf|txt|PDF|TXT)$', '', nome) # Tira a extensão
+                nome = re.sub(r'\s*\(\d+\)$', '', nome).strip()  # Tira cópias (1), (2)
+                if '-' in nome:
+                    p = nome.split('-')[-1].strip().title()
+                    return p if p else "Sem Nome"
+                return "Sem Nome"
+                
+            df['Professor'] = df['Arquivo de Origem'].apply(limpar_nome_professor)
             df = df.sort_values(by="Data Real", ascending=False)
             
         return df
@@ -113,6 +123,7 @@ else:
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
     
     professores_disponiveis = [p for p in df_original['Professor'].unique().tolist() if p and p != "Sem Nome"]
+    professores_disponiveis.sort() # Organiza a lista em ordem alfabética
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
     if professor_selecionado != "Todos":
@@ -135,7 +146,6 @@ else:
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns:
-        # Pega apenas uma linha de cada arquivo para não duplicar o tempo de fala
         df_aulas_unicas = df.drop_duplicates(subset=['Arquivo de Origem'])
         
         total_palavras_danilo = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0).sum()
@@ -164,9 +174,9 @@ else:
                     }
                 }, use_container_width=True)
         else:
-            st.info("⚠️ Não há contagem de palavras para exibir. Isso pode ocorrer se o arquivo TXT processado não tiver a marcação 'Avatar de Danilo' e 'Avatar de...'.")
+            st.info("⚠️ Não há contagem de palavras para exibir no filtro atual.")
     else:
-        st.info("💡 Para visualizar o gráfico, certifique-se de que a sua planilha do Google possui as colunas 'Palavras Aluno' e 'Palavras Professor' na linha 1.")
+        st.info("💡 Para visualizar o gráfico, processe novos arquivos TXT.")
 
     # --- TOP ERROS RECORRENTES ---
     st.markdown("---")

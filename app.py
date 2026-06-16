@@ -173,7 +173,6 @@ else:
             
         st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
-        # --- NOVA LÓGICA DO TOP ERROS (Independente do Calendário) ---
         st.markdown("---")
         
         if professor_selecionado == "Todos":
@@ -223,7 +222,6 @@ else:
                     st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     st.write("---")
 
-        # --- HISTÓRICO COMPLETO ---
         st.markdown("---")
         st.subheader("📚 Histórico Completo de Correções (Por Período)")
         
@@ -255,7 +253,10 @@ else:
                 df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
                 
                 for index, row in df_prof.iterrows():
-                    with st.expander(f"📖 {row['Frase com Erro']}"):
+                    # --- ATUALIZAÇÃO: TIPO DE ERRO NO TÍTULO (Agrupado por Professor) ---
+                    titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}"
+                    
+                    with st.expander(titulo_expander):
                         frase_correta = row['Como Falar Corretamente']
                         dica_estudo = row['Explicação e Dica de Estudo']
                         
@@ -280,7 +281,9 @@ else:
                         st.caption(f"Arquivo: {row['Arquivo de Origem']}")
         else:
             for index, row in df_paginado.iterrows():
-                titulo_expander = f"📖 {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+                # --- ATUALIZAÇÃO: TIPO DE ERRO NO TÍTULO (Lista Geral) ---
+                titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+                
                 with st.expander(titulo_expander):
                     frase_correta = row['Como Falar Corretamente']
                     dica_estudo = row['Explicação e Dica de Estudo']
@@ -303,7 +306,7 @@ else:
                         st.markdown("---")
                         st.markdown(st.session_state[chave_sessao])
                         
-                    st.caption(f"Categoria: {row['Tipo de Erro']} | Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
+                    st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
         if total_paginas > 1:
             st.markdown("<br>", unsafe_allow_html=True) 

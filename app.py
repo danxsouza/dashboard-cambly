@@ -46,9 +46,8 @@ def buscar_novas_palavras_cambridge():
         resposta = requests.get(url, headers=headers)
         soup = BeautifulSoup(resposta.text, 'html.parser')
         
-        # --- ATUALIZAÇÃO 1: LIMITADO CIRURGICAMENTE PARA 1 ITEM ---
         artigos = soup.find_all('article', limit=1)
-        for artigo in articles:
+        for artigo in artigos:
             titulo_tag = artigo.find(['h1', 'h2'], class_=['entry-title', 'title'])
             if titulo_tag and titulo_tag.find('a'):
                 titulo = titulo_tag.text.strip()
@@ -97,15 +96,35 @@ if st.sidebar.button("🚀 Processar Novos PDFs"):
             st.sidebar.error(f"Falha ao conectar com o Google: {e}")
 
 st.sidebar.markdown("---")
+
+# --- ATUALIZAÇÃO: INTERFACE DO MODO DE FOCO INTENSIVO ---
+st.sidebar.header("🎯 Modo de Foco Intensivo")
+opcao_foco = st.sidebar.radio(
+    "Escolha um objetivo de estudo:",
+    ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"]
+)
+
+# Aplicação dos filtros de foco na base de dados original e de trabalho
+if opcao_foco == "⏳ Erros no Passado":
+    filtro_termo = r'passado|past|was|were|did|\bed\b|irregular'
+    df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+    df_original = df_original[df_original['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+elif opcao_foco == "🗺️ Erros de Preposição":
+    filtro_termo = r'preposição|preposition|\bin\b|\bon\b|\bat\b|\bto\b|\bfrom\b|\bfor\b|\bwith\b|regência'
+    df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+    df_original = df_original[df_original['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+
+st.sidebar.markdown("---")
 st.sidebar.header("📅 Filtros de Aula")
 
-if df.empty:
-    st.warning("Ainda não há dados processados para apresentar. Coloque os PDFs no Drive e clique em Processar!")
+if df_original.empty:
+    st.sidebar.warning("Nenhum erro encontrado para o Modo de Foco selecionado.")
+    df = pd.DataFrame()
 else:
     modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
     
     if modo_visualizacao == "Escolher Data no Calendário":
-        data_padrao = df['Data Real'].max()
+        data_padrao = df['Data Real'].max() if not df.empty else df_original['Data Real'].max()
         data_selecionada = st.sidebar.date_input(
             "Selecione o período (clique no início e depois no fim):", 
             value=(data_padrao, data_padrao)
@@ -144,150 +163,122 @@ else:
     if professor_selecionado != "Todos":
         df = df[df["Professor"] == professor_selecionado]
 
-    st.write("Acompanhe sua evolução, identifique padrões e escute como os nativos falam.")
+st.write("Acompanhe sua evolução, identifique padrões e escute como os nativos falam.")
+
+if df.empty:
+    st.info("Nenhum erro encontrado para os filtros selecionados (Foco/Data/Professor).")
+else:
+    # --- BLOCO PRINCIPAL DO DASHBOARD ---
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total de Erros (Filtro)", len(df))
+    with col2:
+        erro_comum = df["Tipo de Erro"].mode()[0] if not df["Tipo de Erro"].empty else "N/A"
+        st.metric("Categoria Mais Frequente", erro_comum)
+    with col3:
+        professores_vistos = ", ".join(df["Professor"].unique())
+        st.metric("Professor(es)", professores_vistos)
+
+    st.markdown("### 📊 Volume de Erros por Categoria")
+    contagem_categorias = df['Tipo de Erro'].value_counts()
+    st.bar_chart(contagem_categorias)
+
+    st.markdown("---")
+    st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
     
-    if df.empty:
-        st.info("Nenhum erro encontrado para os filtros selecionados (Data/Professor).")
+    novas_palavras = buscar_novas_palavras_cambridge()
+    if novas_palavras:
+        for palavra in novas_palavras:
+            st.markdown(f"**[{palavra['titulo']}]({palavra['link']})**")
+            if palavra['resumo']:
+                st.caption(f"{palavra['resumo']}")
     else:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total de Erros (Filtro)", len(df))
-        with col2:
-            erro_comum = df["Tipo de Erro"].mode()[0] if not df["Tipo de Erro"].empty else "N/A"
-            st.metric("Categoria Mais Frequente", erro_comum)
-        with col3:
-            professores_vistos = ", ".join(df["Professor"].unique())
-            st.metric("Professor(es)", professores_vistos)
+        st.info("Não foi possível buscar as novas palavras no momento.")
+        
+    st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
-        # --- ATUALIZAÇÃO 2: GRÁFICO DINÂMICO DE CATEGORIAS ---
-        st.markdown("### 📊 Volume de Erros por Categoria")
-        contagem_categorias = df['Tipo de Erro'].value_counts()
-        st.bar_chart(contagem_categorias)
+    # --- SEÇÃO: TOP ERROS RECORRENTES (Respeita o Modo de Foco) ---
+    st.markdown("---")
+    
+    if professor_selecionado == "Todos":
+        st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
+        st.write("Análise de recorrência baseada no seu Modo de Foco atual para todos os professores.")
+        df_top_erros = df_original.copy()
+    else:
+        st.subheader(f"🔥 Top Erros Mais Recorrentes (com {professor_selecionado})")
+        st.write(f"Análise de recorrência focada no tema selecionado com o(a) tutor(a) {professor_selecionado}.")
+        df_top_erros = df_original[df_original['Professor'] == professor_selecionado]
+        
+    top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
+    
+    erros_frequentes = df_top_erros['Explicação e Dica de Estudo'].value_counts().reset_index()
+    erros_frequentes.columns = ['Explicação', 'Quantidade']
+    top_erros = erros_frequentes.head(top_n)
+    
+    for index, row_top in top_erros.iterrows():
+        qtd = row_top['Quantidade']
+        exp = row_top['Explicação']
+        
+        linhas_erro = df_top_erros[df_top_erros['Explicação e Dica de Estudo'] == exp]
+        profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
+        
+        icone = "🔥" if qtd > 1 else "⚠️"
+        vezes = "vezes" if qtd > 1 else "vez"
+        
+        titulo_top = f"[{profs_envolvidos}] {icone} {qtd} {vezes} - {exp[:60]}..."
+        
+        with st.expander(titulo_top):
+            st.info(f"**Explicação Completa:** {exp}")
+            st.write("**Exemplos onde você cometeu este erro:**")
+            
+            for _, row_detalhe in linhas_erro.iterrows():
+                frase_errada = row_detalhe['Frase com Erro']
+                frase_correta = row_detalhe['Como Falar Corretamente']
+                professor = row_detalhe['Professor']
+                data_aula = row_detalhe['Data da Aula']
+                
+                texto_url = urllib.parse.quote(frase_correta)
+                link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                
+                st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
+                st.markdown(f"  ✅ **O certo é:** {frase_correta}")
+                st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                st.write("---")
 
-        st.markdown("---")
-        st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
+    # --- SEÇÃO: HISTÓRICO COMPLETO ---
+    st.markdown("---")
+    st.subheader("📚 Histórico de Correções Filtrado")
+    
+    ITENS_POR_PAGINA = 20
+    total_linhas = len(df)
+    total_paginas = max(1, (total_linhas - 1) // ITENS_POR_PAGINA + 1)
+    
+    if 'pagina_atual' not in st.session_state:
+        st.session_state['pagina_atual'] = 1
         
-        novas_palavras = buscar_novas_palavras_cambridge()
+    if st.session_state['pagina_atual'] > total_paginas:
+        st.session_state['pagina_atual'] = 1
         
-        if novas_palavras:
-            for palavra in novas_palavras:
-                st.markdown(f"**[{palavra['titulo']}]({palavra['link']})**")
-                if palavra['resumo']:
-                    st.caption(f"{palavra['resumo']}")
-        else:
-            st.info("Não foi possível buscar as novas palavras no momento.")
-            
-        st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
+    inicio = (st.session_state['pagina_atual'] - 1) * ITENS_POR_PAGINA
+    fim = inicio + ITENS_POR_PAGINA
+    df_paginado = df.iloc[inicio:fim]
+    
+    st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} correções.")
 
-        st.markdown("---")
+    if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
+        grupos_aula = df_paginado[['Professor', 'Data da Aula']].drop_duplicates()
         
-        if professor_selecionado == "Todos":
-            st.subheader("🔥 Top Erros Mais Recorrentes (Global)")
-            st.write("Erros frequentes em todo o seu histórico, englobando todos os professores e datas.")
-            df_top_erros = df_original.copy()
-        else:
-            st.subheader(f"🔥 Top Erros Mais Recorrentes (com {professor_selecionado})")
-            st.write(f"Os erros que você mais comete nas aulas com o(a) tutor(a) {professor_selecionado}.")
-            df_top_erros = df_original[df_original['Professor'] == professor_selecionado]
+        for _, grupo in grupos_aula.iterrows():
+            prof = grupo['Professor']
+            data_aula = group['Data da Aula']
             
-        top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
-        
-        erros_frequentes = df_top_erros['Explicação e Dica de Estudo'].value_counts().reset_index()
-        erros_frequentes.columns = ['Explicação', 'Quantidade']
-        top_erros = erros_frequentes.head(top_n)
-        
-        for index, row_top in top_erros.iterrows():
-            qtd = row_top['Quantidade']
-            exp = row_top['Explicação']
+            st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")
+            df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
             
-            linhas_erro = df_top_erros[df_top_erros['Explicação e Dica de Estudo'] == exp]
-            profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
-            
-            icone = "🔥" if qtd > 1 else "⚠️"
-            vezes = "vezes" if qtd > 1 else "vez"
-            
-            titulo_top = f"[{profs_envolvidos}] {icone} {qtd} {vezes} - {exp[:60]}..."
-            
-            with st.expander(titulo_top):
-                st.info(f"**Explicação Completa:** {exp}")
-                st.write("**Exemplos onde você cometeu este erro:**")
-                
-                for _, row_detalhe in linhas_erro.iterrows():
-                    frase_errada = row_detalhe['Frase com Erro']
-                    frase_correta = row_detalhe['Como Falar Corretamente']
-                    professor = row_detalhe['Professor']
-                    data_aula = row_detalhe['Data da Aula']
-                    
-                    texto_url = urllib.parse.quote(frase_correta)
-                    link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
-                    link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
-                    link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
-                    
-                    st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
-                    st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                    st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
-                    st.write("---")
-
-        st.markdown("---")
-        st.subheader("📚 Histórico Completo de Correções (Por Período)")
-        
-        ITENS_POR_PAGINA = 20
-        total_linhas = len(df)
-        total_paginas = max(1, (total_linhas - 1) // ITENS_POR_PAGINA + 1)
-        
-        if 'pagina_atual' not in st.session_state:
-            st.session_state['pagina_atual'] = 1
-            
-        if st.session_state['pagina_atual'] > total_paginas:
-            st.session_state['pagina_atual'] = 1
-            
-        inicio = (st.session_state['pagina_atual'] - 1) * ITENS_POR_PAGINA
-        fim = inicio + ITENS_POR_PAGINA
-        df_paginado = df.iloc[inicio:fim]
-        
-        st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} correções.")
-
-        if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
-            grupos_aula = df_paginado[['Professor', 'Data da Aula']].drop_duplicates()
-            
-            for _, grupo in grupos_aula.iterrows():
-                prof = grupo['Professor']
-                data_aula = grupo['Data da Aula']
-                
-                st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")
-                
-                df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
-                
-                for index, row in df_prof.iterrows():
-                    titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}"
-                    
-                    with st.expander(titulo_expander):
-                        frase_correta = row['Como Falar Corretamente']
-                        dica_estudo = row['Explicação e Dica de Estudo']
-                        
-                        texto_url = urllib.parse.quote(frase_correta)
-                        link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
-                        link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
-                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
-                        
-                        st.success(f"**Como falar corretamente:** {frase_correta}")
-                        st.info(f"**Dica de Estudo:** {dica_estudo}")
-                        st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
-                        
-                        chave_sessao = f"exemplos_cal_{index}"
-                        if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
-                            with st.spinner("Conectando à IA para gerar os exemplos..."):
-                                st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
-                        
-                        if chave_sessao in st.session_state:
-                            st.markdown("---")
-                            st.markdown(st.session_state[chave_sessao])
-                            
-                        st.caption(f"Arquivo: {row['Arquivo de Origem']}")
-        else:
-            for index, row in df_paginado.iterrows():
-                titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
-                
+            for index, row in df_prof.iterrows():
+                titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}"
                 with st.expander(titulo_expander):
                     frase_correta = row['Como Falar Corretamente']
                     dica_estudo = row['Explicação e Dica de Estudo']
@@ -301,8 +292,8 @@ else:
                     st.info(f"**Dica de Estudo:** {dica_estudo}")
                     st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     
-                    chave_sessao = f"exemplos_list_{index}"
-                    if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
+                    chave_sessao = f"exemplos_cal_{index}"
+                    if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
                         with st.spinner("Conectando à IA para gerar os exemplos..."):
                             st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
                     
@@ -310,25 +301,52 @@ else:
                         st.markdown("---")
                         st.markdown(st.session_state[chave_sessao])
                         
-                    st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
+                    st.caption(f"Arquivo: {row['Arquivo de Origem']}")
+    else:
+        for index, row in df_paginado.iterrows():
+            titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+            with st.expander(titulo_expander):
+                frase_correta = row['Como Falar Corretamente']
+                dica_estudo = row['Explicação e Dica de Estudo']
+                
+                texto_url = urllib.parse.quote(frase_correta)
+                link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                
+                st.success(f"**Como falar corretamente:** {frase_correta}")
+                st.info(f"**Dica de Estudo:** {dica_estudo}")
+                st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                
+                chave_sessao = f"exemplos_list_{index}"
+                if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
+                    with st.spinner("Conectando à IA para gerar os exemplos..."):
+                        st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
+                
+                if chave_sessao in st.session_state:
+                    st.markdown("---")
+                    st.markdown(st.session_state[chave_sessao])
+                    
+                st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
-        if total_paginas > 1:
-            st.markdown("<br>", unsafe_allow_html=True) 
-            col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([1, 1.5, 2, 1.5, 1])
-            
-            with col_ant:
-                if st.session_state['pagina_atual'] > 1:
-                    if st.button("⏪ Anterior", use_container_width=True):
-                        st.session_state['pagina_atual'] -= 1
-                        st.rerun() 
-            with col_pag:
-                st.markdown(
-                    f"<div style='text-align: center; padding: 5px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.3); font-weight: bold; font-size: 16px;'>"
-                    f"Página {st.session_state['pagina_atual']} de {total_paginas}</div>", 
-                    unsafe_allow_html=True
-                )
-            with col_prox:
-                if st.session_state['pagina_atual'] < total_paginas:
-                    if st.button("Próxima ⏩", use_container_width=True):
-                        st.session_state['pagina_atual'] += 1
-                        st.rerun() 
+    # --- PAGINAÇÃO ---
+    if total_paginas > 1:
+        st.markdown("<br>", unsafe_allow_html=True) 
+        col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([1, 1.5, 2, 1.5, 1])
+        
+        with col_ant:
+            if st.session_state['pagina_atual'] > 1:
+                if st.button("⏪ Anterior", use_container_width=True):
+                    st.session_state['pagina_atual'] -= 1
+                    st.rerun() 
+        with col_pag:
+            st.markdown(
+                f"<div style='text-align: center; padding: 5px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.3); font-weight: bold; font-size: 16px;'>"
+                f"Página {st.session_state['pagina_atual']} de {total_paginas}</div>", 
+                unsafe_allow_html=True
+            )
+        with col_prox:
+            if st.session_state['pagina_atual'] < total_paginas:
+                if st.button("Próxima ⏩", use_container_width=True):
+                    st.session_state['pagina_atual'] += 1
+                    st.rerun() 

@@ -18,7 +18,6 @@ URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c
 def carregar_dados():
     try:
         key_dict = json.loads(st.secrets["gcp_service_account"])
-        # --- CORRIGIDO: Voltando para 'spreadsheets' completo para corrigir a autenticação ---
         scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -40,7 +39,7 @@ def carregar_dados():
 def chamar_gemini(frase, dica):
     chave_api = st.secrets["GEMINI_API_KEY"]
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=" + chave_api
-    prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos in inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
+    prompt = f"A frase correta em inglês é: '{frase}'. A dica de estudo foi: '{dica}'. Gere 3 exemplos curtos e práticos em inglês (com a tradução em português) usando essa mesma estrutura ou vocabulário. Responda APENAS com os 3 exemplos em formato de lista."
     payload = {"contents": [{"parts": [{"text": prompt}]}]}
     try:
         r = requests.post(url, json=payload)
@@ -69,7 +68,7 @@ st.sidebar.markdown("---")
 
 st.sidebar.header("🎯 Modo de Foco Intensivo")
 opcao_foco = st.sidebar.radio(
-    "Escolha um objetivo de estudo:",
+    "Escolha um objective de estudo:",
     ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"]
 )
 
@@ -110,7 +109,8 @@ else:
         
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
     
-    professores_disponiveis = df_original['Professor'].unique().tolist()
+    # --- ATUALIZAÇÃO: FILTRANDO "SEM NOME" DA LISTA DE PROFESSORES ---
+    professores_disponiveis = [p for p in df_original['Professor'].unique().tolist() if p and p != "Sem Nome"]
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
     if professor_selecionado != "Todos":
@@ -125,7 +125,7 @@ else:
     with col1:
         st.metric("Total de Erros Encontrados", len(df))
     with col2:
-        professores_vistos = ", ".join(df["Professor"].unique())
+        professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"])
         st.metric("Professor(es) das Aulas", professores_vistos)
 
     # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
@@ -149,7 +149,7 @@ else:
             with col_talk2:
                 dados_pizza = pd.DataFrame({
                     "Quem Falou": ["Danilo (Você)", nome_label_prof],
-                    "Minutos": [minutos_danilo, minutes_tutor] if 'minutes_tutor' in locals() else [minutos_danilo, minutos_tutor]
+                    "Minutos": [minutos_danilo, minutos_tutor]
                 })
                 st.vega_lite_chart(dados_pizza, {
                     'mark': {'type': 'arc', 'innerRadius': 40},
@@ -183,7 +183,7 @@ else:
         exp = row_top['Explicação']
         
         linhas_erro = df_top_erros[df_top_erros['Explicação e Dica de Estudo'] == exp]
-        profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
+        profs_envolvidos = ", ".join([p for p in linhas_erro['Professor'].unique() if p != "Sem Nome"])
         
         icone = "🔥" if qtd > 1 else "⚠️"
         vezes = "vezes" if qtd > 1 else "vez"
@@ -233,6 +233,7 @@ else:
         
         for _, grupo in grupos_aula.iterrows():
             prof = grupo['Professor']
+            if prof == "Sem Nome": continue
             data_aula = grupo['Data da Aula'] 
             
             st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")
@@ -264,7 +265,8 @@ else:
                     st.caption(f"Origem: {row['Arquivo de Origem']}")
     else:
         for index, row in df_paginado.iterrows():
-            titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
+            prof_exibicao = row['Professor'] if row['Professor'] != "Sem Nome" else "Tutor"
+            titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{prof_exibicao}]"
             with st.expander(titulo_expander):
                 frase_correta = row['Como Falar Corretamente']
                 dica_estudo = row['Explicação e Dica de Estudo']
@@ -288,10 +290,11 @@ else:
                     st.markdown(st.session_state[chave_sessao])
                 st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
-    # --- BOTÕES DE PAGINAÇÃO COMPACTOS ---
+    # --- ATUALIZAÇÃO: BOTÕES DE PAGINAÇÃO APROXIMADOS E CENTRALIZADOS ---
     if total_paginas > 1:
         st.markdown("<br>", unsafe_allow_html=True) 
-        col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([2, 1, 2, 1, 2])
+        # Modificado proporções das colunas laterais e centrais para juntar os botões
+        col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([3.8, 0.8, 1.4, 0.8, 3.8])
         
         with col_ant:
             if st.session_state['pagina_atual'] > 1:
@@ -300,7 +303,7 @@ else:
                     st.rerun() 
         with col_pag:
             st.markdown(
-                f"<div style='text-align: center; padding: 4px; font-weight: bold; font-size: 14px;'>"
+                f"<div style='text-align: center; padding: 6px 0px; font-weight: bold; font-size: 14px; background-color: rgba(128,128,128,0.05); border-radius: 4px; border: 1px solid rgba(128,128,128,0.1);'>"
                 f"Pág {st.session_state['pagina_atual']} de {total_paginas}</div>", 
                 unsafe_allow_html=True
             )

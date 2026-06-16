@@ -97,14 +97,12 @@ if st.sidebar.button("🚀 Processar Novos PDFs"):
 
 st.sidebar.markdown("---")
 
-# --- ATUALIZAÇÃO: INTERFACE DO MODO DE FOCO INTENSIVO ---
 st.sidebar.header("🎯 Modo de Foco Intensivo")
 opcao_foco = st.sidebar.radio(
     "Escolha um objetivo de estudo:",
     ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"]
 )
 
-# Aplicação dos filtros de foco na base de dados original e de trabalho
 if opcao_foco == "⏳ Erros no Passado":
     filtro_termo = r'passado|past|was|were|did|\bed\b|irregular'
     df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
@@ -168,7 +166,6 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty:
     st.info("Nenhum erro encontrado para os filtros selecionados (Foco/Data/Professor).")
 else:
-    # --- BLOCO PRINCIPAL DO DASHBOARD ---
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Erros (Filtro)", len(df))
@@ -197,7 +194,6 @@ else:
         
     st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
-    # --- SEÇÃO: TOP ERROS RECORRENTES (Respeita o Modo de Foco) ---
     st.markdown("---")
     
     if professor_selecionado == "Todos":
@@ -247,7 +243,6 @@ else:
                 st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                 st.write("---")
 
-    # --- SEÇÃO: HISTÓRICO COMPLETO ---
     st.markdown("---")
     st.subheader("📚 Histórico de Correções Filtrado")
     
@@ -272,7 +267,8 @@ else:
         
         for _, grupo in grupos_aula.iterrows():
             prof = grupo['Professor']
-            data_aula = group['Data da Aula']
+            # --- CORRIGIDO: de 'group' para 'grupo' ---
+            data_aula = grupo['Data da Aula'] 
             
             st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")
             df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
@@ -329,7 +325,6 @@ else:
                     
                 st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
-    # --- PAGINAÇÃO ---
     if total_paginas > 1:
         st.markdown("<br>", unsafe_allow_html=True) 
         col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([1, 1.5, 2, 1.5, 1])

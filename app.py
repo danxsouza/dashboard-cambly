@@ -6,7 +6,6 @@ import gspread
 import requests
 import urllib.parse
 from datetime import datetime
-from bs4 import BeautifulSoup
 
 # Configuração da página Web
 st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
@@ -19,7 +18,7 @@ URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c
 def carregar_dados():
     try:
         key_dict = json.loads(st.secrets["gcp_service_account"])
-        scopes = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scopes = ['https://www.googleapis.com/auth/sheets', 'https://www.googleapis.com/auth/drive']
         creds = Credentials.from_service_account_info(key_dict, scopes=scopes)
         client = gspread.authorize(creds)
         sheet = client.open_by_key("11Cg3acTMwOIZ82L2hn6i5RnV4akuSoAp1u3M-HTxMi0").sheet1
@@ -28,8 +27,8 @@ def carregar_dados():
         
         if not df.empty:
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
-            # Ajustado regex para aceitar tanto .pdf antigo quanto .txt novo no nome do arquivo
-            df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt)', expand=False)
+            # Regex corrigido para aceitar TXT maiúsculo ou minúsculo
+            df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt|PDF|TXT)', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
             df = df.sort_values(by="Data Real", ascending=False)
             
@@ -37,36 +36,6 @@ def carregar_dados():
     except Exception as e:
         st.error(f"Ocorreu um erro ao conectar à base de dados: {e}")
         return pd.DataFrame()
-
-@st.cache_data(ttl=3600) 
-def buscar_novas_palavras_cambridge():
-    url = "https://dictionaryblog.cambridge.org/category/new-words/"
-    palavras = []
-    try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        resposta = requests.get(url, headers=headers)
-        soup = BeautifulSoup(resposta.text, 'html.parser')
-        
-        artigos = soup.find_all('article', limit=1)
-        for artigo in artigos:
-            titulo_tag = artigo.find(['h1', 'h2'], class_=['entry-title', 'title'])
-            if titulo_tag and titulo_tag.find('a'):
-                titulo = titulo_tag.text.strip()
-                link = titulo_tag.find('a')['href']
-                
-                conteudo_tag = artigo.find('div', class_='entry-content')
-                resumo = conteudo_tag.text.strip()[:150] + "..." if conteudo_tag else ""
-                
-                palavras.append({"titulo": titulo, "link": link, "resumo": resumo})
-                
-        if not palavras:
-            links = soup.select('.entry-title a')[:1]
-            for a in links:
-                palavras.append({"titulo": a.text.strip(), "link": a['href'], "resumo": ""})
-                
-        return palavras
-    except Exception as e:
-        return []
 
 def chamar_gemini(frase, dica):
     chave_api = st.secrets["GEMINI_API_KEY"]
@@ -79,10 +48,9 @@ def chamar_gemini(frase, dica):
     except:
         return "Não foi possível gerar os exemplos no momento."
 
-df = carregar_dados()
-df_original = df.copy() 
+df_original = carregar_dados()
+df = df_original.copy() 
 
-# --- ALTERAÇÃO DO BOTÃO PARA PROVESSAR TXT ---
 st.sidebar.header("⚙️ Ações")
 if st.sidebar.button("🚀 Processar Novos TXTs"):
     with st.spinner("Lendo arquivos TXT e acionando a Inteligência Artificial... Aguarde."):
@@ -95,7 +63,7 @@ if st.sidebar.button("🚀 Processar Novos TXTs"):
             else:
                 st.sidebar.error("Erro. O Apps Script retornou uma falha.")
         except Exception as e:
-            st.sidebar.sidebar.error(f"Falha ao conectar com o Google: {e}")
+            st.sidebar.error(f"Falha ao conectar com o Google: {e}")
 
 st.sidebar.markdown("---")
 
@@ -126,7 +94,7 @@ else:
     if modo_visualizacao == "Escolher Data no Calendário":
         data_padrao = df['Data Real'].max() if not df.empty else df_original['Data Real'].max()
         data_selecionada = st.sidebar.date_input(
-            "Selecione o período (clique no início e depois no fim):", 
+            "Selecione o período:", 
             value=(data_padrao, data_padrao)
         )
         
@@ -140,22 +108,7 @@ else:
         else:
             data_inicio = data_fim = data_selecionada
         
-        st.sidebar.caption(f"💡 **Aulas registradas entre {data_inicio.strftime('%d/%m/%Y')} e {data_fim.strftime('%d/%m/%Y')}:**")
-        
-        dias_com_aula = df_original['Data Real'].unique()
-        dias_no_periodo = sorted([d for d in dias_com_aula if data_inicio <= d <= data_fim], reverse=True)
-        
-        if dias_no_periodo:
-            for d in dias_no_periodo:
-                profs_deste_dia = df_original[df_original['Data Real'] == d]['Professor'].unique()
-                profs_texto = ", ".join(profs_deste_dia)
-                st.sidebar.caption(f"📌 {d.strftime('%d/%m/%Y')} (com {profs_texto})")
-        else:
-            st.sidebar.caption("Nenhuma aula encontrada neste período.")
-
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
-    
-    st.sidebar.markdown("---")
     
     professores_disponiveis = df_original['Professor'].unique().tolist()
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
@@ -166,76 +119,55 @@ else:
 st.write("Acompanhe sua evolução, identifique padrões e escute como os nativos falam.")
 
 if df.empty:
-    st.info("Nenhum erro encontrado para os filtros selecionados (Foco/Data/Professor).")
+    st.info("Nenhum erro encontrado para os filtros selecionados.")
 else:
-    # MÈTRICAS PRINCIPAIS
-    col1, col2, col3 = st.columns(3)
+    # MÉTRICAS SIMPLIFICADAS
+    col1, col2 = st.columns(2)
     with col1:
-        st.metric("Total de Erros (Filtro)", len(df))
+        st.metric("Total de Erros Encontrados", len(df))
     with col2:
-        erro_comum = df["Tipo de Erro"].mode()[0] if not df["Tipo de Erro"].empty else "N/A"
-        st.metric("Categoria Mais Frequente", erro_comum)
-    with col3:
         professores_vistos = ", ".join(df["Professor"].unique())
-        st.metric("Professor(es)", professores_vistos)
+        st.metric("Professor(es) das Aulas", professores_vistos)
 
-    # --- NOVO BLOCO: ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
+    # --- SEÇÃO: ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME DINÂMICO) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
-    # Verifica se existem os dados de contagem de palavras nas colunas novas
-    if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns and not df['Palavras Aluno'].dropna().empty:
+    if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns:
+        # Puxa os dados respeitando estritamente o DataFrame "df" já filtrado
         total_palavras_danilo = pd.to_numeric(df['Palavras Aluno'], errors='coerce').sum()
         total_palavras_tutor = pd.to_numeric(df['Palavras Professor'], errors='coerce').sum()
         
         if total_palavras_danilo > 0 or total_palavras_tutor > 0:
-            # Cálculo linguístico: Média de 140 palavras por minuto
             minutos_danilo = round(total_palavras_danilo / 140, 1)
             minutos_tutor = round(total_palavras_tutor / 140, 1)
             
+            # Define o nome do rótulo do professor dinamicamente
+            nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor"
+            
             col_talk1, col_talk2 = st.columns([1, 2])
             with col_talk1:
-                st.metric("Seu Tempo de Fala Estimado", f"⏱️ {minutos_danilo} min")
-                st.metric("Tempo do Professor Estimado", f"⏱️ {minutos_tutor} min")
+                st.metric("Seu Tempo de Fala", f"⏱️ {minutos_danilo} min")
+                st.metric(f"Tempo de Fala - {nome_label_prof}", f"⏱️ {minutos_tutor} min")
             with col_talk2:
-                # Desenha o gráfico de pizza (Donut Chart) dinâmico
                 dados_pizza = pd.DataFrame({
-                    "Quem Falou": ["Danilo (Você)", "Professor"],
+                    "Quem Falou": ["Danilo (Você)", nome_label_prof],
                     "Minutos": [minutos_danilo, minutos_tutor]
                 })
-                st.caption("Proporção de conversa baseada no volume de termos ditos:")
                 st.vega_lite_chart(dados_pizza, {
-                    'mark': {'type': 'arc', 'innerRadius': 50},
+                    'mark': {'type': 'arc', 'innerRadius': 40},
                     'encoding': {
                         'theta': {'field': 'Minutos', 'type': 'quantitative'},
                         'color': {'field': 'Quem Falou', 'type': 'nominal', 'scale': {'range': ['#2b5c8f', '#2ca02c']}}
                     }
                 }, use_container_width=True)
         else:
-            st.info("Os arquivos TXT selecionados ainda não possuem histórico de volumetria de áudio calculado.")
+            st.info("Nenhum dado de volumetria de áudio encontrado para os filtros selecionados.")
     else:
-        st.info("💡 As estatísticas de tempo de fala aparecerão aqui assim que você processar as novas aulas no formato .txt")
+        st.info("As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
 
-    st.markdown("### 📊 Volume de Erros por Categoria")
-    contagem_categorias = df['Tipo de Erro'].value_counts()
-    st.bar_chart(contagem_categorias)
-
+    # --- SEÇÃO: TOP ERROS RECORRENTES ---
     st.markdown("---")
-    st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
-    
-    novas_palavras = buscar_novas_palavras_cambridge()
-    if novas_palavras:
-        for palavra in novas_palavras:
-            st.markdown(f"**[{palavra['titulo']}]({palavra['link']})**")
-            if palavra['resumo']:
-                st.caption(f"{palavra['resumo']}")
-    else:
-        st.info("Não foi possível buscar as novas palavras no momento.")
-        
-    st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
-
-    st.markdown("---")
-    
     if professor_selecionado == "Todos":
         st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
         df_top_erros = df_original.copy()
@@ -263,8 +195,6 @@ else:
         
         with st.expander(titulo_top):
             st.info(f"**Explicação Completa:** {exp}")
-            st.write("**Exemplos onde você cometeu este erro:**")
-            
             for _, row_detalhe in linhas_erro.iterrows():
                 frase_errada = row_detalhe['Frase com Erro']
                 frase_correta = row_detalhe['Como Falar Corretamente']
@@ -278,9 +208,10 @@ else:
                 
                 st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
                 st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                 st.write("---")
 
+    # --- SEÇÃO: HISTÓRICO DE CORREÇÕES FILTRADO ---
     st.markdown("---")
     st.subheader("📚 Histórico de Correções Filtrado")
     
@@ -323,18 +254,17 @@ else:
                     
                     st.success(f"**Como falar corretamente:** {frase_correta}")
                     st.info(f"**Dica de Estudo:** {dica_estudo}")
-                    st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                    st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     
                     chave_sessao = f"exemplos_cal_{index}"
                     if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
-                        with st.spinner("Conectando à IA para gerar os exemplos..."):
+                        with st.spinner("Gerando exemplos..."):
                             st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
                     
                     if chave_sessao in st.session_state:
                         st.markdown("---")
                         st.markdown(st.session_state[chave_sessao])
-                        
-                    st.caption(f"Arquivo: {row['Arquivo de Origem']}")
+                    st.caption(f"Origem: {row['Arquivo de Origem']}")
     else:
         for index, row in df_paginado.iterrows():
             titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
@@ -349,36 +279,37 @@ else:
                 
                 st.success(f"**Como falar corretamente:** {frase_correta}")
                 st.info(f"**Dica de Estudo:** {dica_estudo}")
-                st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                 
                 chave_sessao = f"exemplos_list_{index}"
                 if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
-                    with st.spinner("Conectando à IA para gerar os exemplos..."):
+                    with st.spinner("Gerando exemplos..."):
                         st.session_state[chave_sessao] = chamar_gemini(frase_correta, dica_estudo)
                 
                 if chave_sessao in st.session_state:
                     st.markdown("---")
                     st.markdown(st.session_state[chave_sessao])
-                    
                 st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
+    # --- BOTÕES DE PAGINAÇÃO COMPACTOS ---
     if total_paginas > 1:
         st.markdown("<br>", unsafe_allow_html=True) 
-        col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([1, 1.5, 2, 1.5, 1])
+        col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([2, 1, 2, 1, 2])
         
         with col_ant:
             if st.session_state['pagina_atual'] > 1:
-                if st.button("⏪ Anterior", use_container_width=True):
+                if st.button("⏪ Ant", use_container_width=True):
                     st.session_state['pagina_atual'] -= 1
                     st.rerun() 
         with col_pag:
             st.markdown(
-                f"<div style='text-align: center; padding: 5px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.3); font-weight: bold; font-size: 16px;'>"
-                f"Página {st.session_state['pagina_atual']} de {total_paginas}</div>", 
+                f"<div style='text-align: center; padding: 4px; font-weight: bold; font-size: 14px;'>"
+                f"Pág {st.session_state['pagina_atual']} de {total_paginas}</div>", 
                 unsafe_allow_html=True
             )
         with col_prox:
             if st.session_state['pagina_atual'] < total_paginas:
-                if st.button("Próxima ⏩", use_container_width=True):
+                if st.button("Prox ⏩", use_container_width=True):
+                    st.session_state['pagina_atual'] -= 1
                     st.session_state['pagina_atual'] += 1
                     st.rerun() 

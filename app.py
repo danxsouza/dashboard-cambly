@@ -46,8 +46,9 @@ def buscar_novas_palavras_cambridge():
         resposta = requests.get(url, headers=headers)
         soup = BeautifulSoup(resposta.text, 'html.parser')
         
-        artigos = soup.find_all('article', limit=3)
-        for artigo in artigos:
+        # --- ATUALIZAÇÃO 1: LIMITADO CIRURGICAMENTE PARA 1 ITEM ---
+        artigos = soup.find_all('article', limit=1)
+        for artigo in articles:
             titulo_tag = artigo.find(['h1', 'h2'], class_=['entry-title', 'title'])
             if titulo_tag and titulo_tag.find('a'):
                 titulo = titulo_tag.text.strip()
@@ -59,7 +60,7 @@ def buscar_novas_palavras_cambridge():
                 palavras.append({"titulo": titulo, "link": link, "resumo": resumo})
                 
         if not palavras:
-            links = soup.select('.entry-title a')[:3]
+            links = soup.select('.entry-title a')[:1]
             for a in links:
                 palavras.append({"titulo": a.text.strip(), "link": a['href'], "resumo": ""})
                 
@@ -158,6 +159,11 @@ else:
             professores_vistos = ", ".join(df["Professor"].unique())
             st.metric("Professor(es)", professores_vistos)
 
+        # --- ATUALIZAÇÃO 2: GRÁFICO DINÂMICO DE CATEGORIAS ---
+        st.markdown("### 📊 Volume de Erros por Categoria")
+        contagem_categorias = df['Tipo de Erro'].value_counts()
+        st.bar_chart(contagem_categorias)
+
         st.markdown("---")
         st.subheader("🆕 Novas Palavras em Inglês (Cambridge Dictionary)")
         
@@ -253,7 +259,6 @@ else:
                 df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]
                 
                 for index, row in df_prof.iterrows():
-                    # --- ATUALIZAÇÃO: TIPO DE ERRO NO TÍTULO (Agrupado por Professor) ---
                     titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}"
                     
                     with st.expander(titulo_expander):
@@ -281,7 +286,6 @@ else:
                         st.caption(f"Arquivo: {row['Arquivo de Origem']}")
         else:
             for index, row in df_paginado.iterrows():
-                # --- ATUALIZAÇÃO: TIPO DE ERRO NO TÍTULO (Lista Geral) ---
                 titulo_expander = f"📖 [{row['Tipo de Erro']}] {row['Frase com Erro']}   🏷️ [{row['Professor']}]"
                 
                 with st.expander(titulo_expander):

@@ -13,7 +13,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -30,7 +30,6 @@ def carregar_dados():
             df.columns = df.columns.str.strip() 
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
             
-            # Extrator ultra-robusto de nomes de professores
             def limpar_nome_professor(arq):
                 if pd.isna(arq): return "Sem Nome"
                 nome = str(arq).strip()
@@ -95,7 +94,6 @@ if df_original.empty:
 else:
     modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
     
-    # Valores padrão de data para evitar quebras
     data_inicio = df_original['Data Real'].min()
     data_fim = df_original['Data Real'].max()
     
@@ -115,26 +113,23 @@ else:
     professores_disponiveis.sort() 
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
 
-    # --- CRIAÇÃO DO DATAFRAME ISOLADO PARA CONVERSAÇÃO (TALK TIME) ---
-    # Este bloco filtra apenas por Data e Professor, ignorando o Modo de Foco Intensivo
+    # DataFrame Isolado para o Talk Time (ignora o foco de erros)
     df_conversacao = df_original.copy()
     if modo_visualizacao == "Escolher Data no Calendário":
         df_conversacao = df_conversacao[(df_conversacao["Data Real"] >= data_inicio) & (df_conversacao["Data Real"] <= data_fim)]
     if professor_selecionado != "Todos":
         df_conversacao = df_conversacao[df_conversacao["Professor"] == professor_selecionado]
 
-    # --- APLICAÇÃO DOS FILTROS NO DATAFRAME DE ERROS PRINCIPAL ---
+    # Aplicação dos filtros no DataFrame de Erros Principal
     if modo_visualizacao == "Escolher Data no Calendário":
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
         
     if opcao_foco == "⏳ Erros no Passado":
         filtro_termo = r'passado|past|was|were|did|\bed\b|irregular'
         df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
-        df_original = df_original[df_original['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
     elif opcao_foco == "🗺️ Erros de Preposição":
         filtro_termo = r'preposição|preposition|\bin\b|\bon\b|\bat\b|\bto\b|\bfrom\b|\bfor\b|\bwith\b|regência'
         df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
-        df_original = df_original[df_original['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
 
     if professor_selecionado != "Todos":
         df = df[df["Professor"] == professor_selecionado]
@@ -144,7 +139,6 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty and df_conversacao.empty:
     st.info("Nenhum registro encontrado para os filtros selecionados.")
 else:
-    # MÉTRICAS SIMPLIFICADAS (Respeitam o foco ativo)
     col1, col2 = st.columns(2)
     with col1:
         st.metric("Total de Erros Encontrados", len(df))
@@ -152,12 +146,11 @@ else:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
         st.metric("Professor(es) das Aulas", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- SEÇÃO: ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME CORRIGIDO) ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
-        # Usa o dataframe global da aula para extrair os minutos reais sem duplicar
         df_aulas_unicas = df_conversacao.drop_duplicates(subset=['Arquivo de Origem'])
         
         total_palavras_danilo = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0).sum()
@@ -190,51 +183,50 @@ else:
     else:
         st.info("💡 As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
 
-    # --- TOP ERROS RECORRENTES ---
+    # --- ATUALIZAÇÃO: TOP ERROS RECORRENTES (APENAS CONTADOS > 1 E RESPEITANDO OS FILTROS) ---
     if not df.empty:
         st.markdown("---")
-        if professor_selecionado == "Todos":
-            st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
-            df_top_erros = df_original.copy()
-        else:
-            st.subheader(f"🔥 Top Erros Mais Recorrentes (com {professor_selecionado})")
-            df_top_erros = df_original[df_original['Professor'] == professor_selecionado]
-            
-        top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
+        st.subheader("🔥 Top Erros Mais Recorrentes")
         
-        erros_frequentes = df_top_erros['Explicação e Dica de Estudo'].value_counts().reset_index()
+        # Baseia-se estritamente na variável 'df' que já está 100% filtrada
+        erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
         erros_frequentes.columns = ['Explicação', 'Quantidade']
-        top_erros = erros_frequentes.head(top_n)
         
-        for index, row_top in top_erros.iterrows():
-            qtd = row_top['Quantidade']
-            exp = row_top['Explicação']
+        # REGRA FILTRO: Mantém estritamente apenas o que aconteceu MAIS de uma vez
+        erros_frequentes = erros_frequentes[erros_frequentes['Quantidade'] > 1]
+        
+        if erros_frequentes.empty:
+            st.info("🎯 Excelente sinal! Não foram encontrados erros repetidos (com mais de uma ocorrência) para os filtros selecionados atualmente.")
+        else:
+            top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
+            top_erros = erros_frequentes.head(top_n)
             
-            linhas_erro = df_top_erros[df_top_erros['Explicação e Dica de Estudo'] == exp]
-            profs_envolvidos = ", ".join([p for p in linhas_erro['Professor'].unique() if p != "Sem Nome"])
-            
-            icone = "🔥" if qtd > 1 else "⚠️"
-            vezes = "vezes" if qtd > 1 else "vez"
-            
-            titulo_top = f"[{profs_envolvidos}] {icone} {qtd} {vezes} - {exp[:60]}..."
-            
-            with st.expander(titulo_top):
-                st.info(f"**Explicação Completa:** {exp}")
-                for _, row_detalhe in linhas_erro.iterrows():
-                    frase_errada = row_detalhe['Frase com Erro']
-                    frase_correta = row_detalhe['Como Falar Corretamente']
-                    professor = row_detalhe['Professor']
-                    data_aula = row_detalhe['Data da Aula']
-                    
-                    texto_url = urllib.parse.quote(frase_correta)
-                    link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
-                    link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
-                    link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
-                    
-                    st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
-                    st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                    st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
-                    st.write("---")
+            for index, row_top in top_erros.iterrows():
+                qtd = row_top['Quantidade']
+                exp = row_top['Explicação']
+                
+                linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
+                profs_envolvidos = ", ".join([p for p in linhas_erro['Professor'].unique() if p != "Sem Nome"])
+                
+                titulo_top = f"[{profs_envolvidos}] 🔥 {qtd} vezes - {exp[:60]}..."
+                
+                with st.expander(titulo_top):
+                    st.info(f"**Explicação Completa:** {exp}")
+                    for _, row_detalhe in linhas_erro.iterrows():
+                        frase_errada = row_detalhe['Frase com Erro']
+                        frase_correta = row_detalhe['Como Falar Corretamente']
+                        professor = row_detalhe['Professor']
+                        data_aula = row_detalhe['Data da Aula']
+                        
+                        texto_url = urllib.parse.quote(frase_correta)
+                        link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
+                        link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                        
+                        st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
+                        st.markdown(f"  ✅ **O certo é:** {frase_correta}")
+                        st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
+                        st.write("---")
 
     # --- HISTÓRICO DE CORREÇÕES ---
     if not df.empty:

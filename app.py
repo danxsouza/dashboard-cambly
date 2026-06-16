@@ -30,12 +30,11 @@ def carregar_dados():
             df.columns = df.columns.str.strip() 
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
             
-            # --- ATUALIZAÇÃO: Extrator Inteligente de Nomes ---
             def limpar_nome_professor(arq):
                 if pd.isna(arq): return "Sem Nome"
                 nome = str(arq).strip()
-                nome = re.sub(r'\.(pdf|txt|PDF|TXT)$', '', nome) # Tira a extensão
-                nome = re.sub(r'\s*\(\d+\)$', '', nome).strip()  # Tira cópias (1), (2)
+                nome = re.sub(r'\.(pdf|txt|PDF|TXT)$', '', nome) 
+                nome = re.sub(r'\s*\(\d+\)$', '', nome).strip()  
                 if '-' in nome:
                     p = nome.split('-')[-1].strip().title()
                     return p if p else "Sem Nome"
@@ -123,7 +122,7 @@ else:
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
     
     professores_disponiveis = [p for p in df_original['Professor'].unique().tolist() if p and p != "Sem Nome"]
-    professores_disponiveis.sort() # Organiza a lista em ordem alfabética
+    professores_disponiveis.sort() 
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
     if professor_selecionado != "Todos":
@@ -141,7 +140,6 @@ else:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"])
         st.metric("Professor(es) das Aulas", professores_vistos)
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
@@ -166,19 +164,19 @@ else:
                     "Quem Falou": ["Danilo (Você)", nome_label_prof],
                     "Minutos": [minutos_danilo, minutos_tutor]
                 })
+                # --- CORREÇÃO DO AVISO DO STREAMLIT AQUI NO GRÁFICO ---
                 st.vega_lite_chart(dados_pizza, {
                     'mark': {'type': 'arc', 'innerRadius': 40},
                     'encoding': {
                         'theta': {'field': 'Minutos', 'type': 'quantitative'},
                         'color': {'field': 'Quem Falou', 'type': 'nominal', 'scale': {'range': ['#2b5c8f', '#2ca02c']}}
                     }
-                }, use_container_width=True)
+                }, width="stretch")
         else:
             st.info("⚠️ Não há contagem de palavras para exibir no filtro atual.")
     else:
         st.info("💡 Para visualizar o gráfico, processe novos arquivos TXT.")
 
-    # --- TOP ERROS RECORRENTES ---
     st.markdown("---")
     if professor_selecionado == "Todos":
         st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
@@ -223,7 +221,6 @@ else:
                 st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                 st.write("---")
 
-    # --- HISTÓRICO DE CORREÇÕES ---
     st.markdown("---")
     st.subheader("📚 Histórico de Correções Filtrado")
     
@@ -305,14 +302,14 @@ else:
                     st.markdown(st.session_state[chave_sessao])
                 st.caption(f"Data: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
 
-    # --- BOTÕES DE PAGINAÇÃO COMPACTOS ---
     if total_paginas > 1:
         st.markdown("<br>", unsafe_allow_html=True) 
         col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([3.8, 0.8, 1.4, 0.8, 3.8])
         
         with col_ant:
             if st.session_state['pagina_atual'] > 1:
-                if st.button("⏪ Ant", use_container_width=True):
+                # --- CORREÇÃO DO AVISO DO STREAMLIT AQUI NOS BOTÕES ---
+                if st.button("⏪ Ant", width="stretch"):
                     st.session_state['pagina_atual'] -= 1
                     st.rerun() 
         with col_pag:
@@ -323,6 +320,6 @@ else:
             )
         with col_prox:
             if st.session_state['pagina_atual'] < total_paginas:
-                if st.button("Prox ⏩", use_container_width=True):
+                if st.button("Prox ⏩", width="stretch"):
                     st.session_state['pagina_atual'] += 1
                     st.rerun() 

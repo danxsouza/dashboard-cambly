@@ -13,7 +13,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -137,7 +137,7 @@ else:
     
     st.sidebar.markdown("---")
     
-    professores_disponiveis = df['Professor'].unique().tolist()
+    professores_disponiveis = df_original['Professor'].unique().tolist()
     professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
     
     if professor_selecionado != "Todos":
@@ -173,12 +173,21 @@ else:
             
         st.markdown("🔗 **[Acessar a página oficial do Cambridge Dictionary](https://dictionaryblog.cambridge.org/category/new-words/)**")
 
+        # --- NOVA LÓGICA DO TOP ERROS (Independente do Calendário) ---
         st.markdown("---")
-        st.subheader("🔥 Top Erros Mais Recorrentes")
         
+        if professor_selecionado == "Todos":
+            st.subheader("🔥 Top Erros Mais Recorrentes (Global)")
+            st.write("Erros frequentes em todo o seu histórico, englobando todos os professores e datas.")
+            df_top_erros = df_original.copy()
+        else:
+            st.subheader(f"🔥 Top Erros Mais Recorrentes (com {professor_selecionado})")
+            st.write(f"Os erros que você mais comete nas aulas com o(a) tutor(a) {professor_selecionado}.")
+            df_top_erros = df_original[df_original['Professor'] == professor_selecionado]
+            
         top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
         
-        erros_frequentes = df['Explicação e Dica de Estudo'].value_counts().reset_index()
+        erros_frequentes = df_top_erros['Explicação e Dica de Estudo'].value_counts().reset_index()
         erros_frequentes.columns = ['Explicação', 'Quantidade']
         top_erros = erros_frequentes.head(top_n)
         
@@ -186,7 +195,7 @@ else:
             qtd = row_top['Quantidade']
             exp = row_top['Explicação']
             
-            linhas_erro = df[df['Explicação e Dica de Estudo'] == exp]
+            linhas_erro = df_top_erros[df_top_erros['Explicação e Dica de Estudo'] == exp]
             profs_envolvidos = ", ".join(linhas_erro['Professor'].unique())
             
             icone = "🔥" if qtd > 1 else "⚠️"
@@ -202,19 +211,21 @@ else:
                     frase_errada = row_detalhe['Frase com Erro']
                     frase_correta = row_detalhe['Como Falar Corretamente']
                     professor = row_detalhe['Professor']
+                    data_aula = row_detalhe['Data da Aula']
                     
                     texto_url = urllib.parse.quote(frase_correta)
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
                     link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                     
-                    st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor}]**")
+                    st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
                     st.markdown(f"  ✅ **O certo é:** {frase_correta}")
                     st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     st.write("---")
 
+        # --- HISTÓRICO COMPLETO ---
         st.markdown("---")
-        st.subheader("📚 Histórico Completo de Correções")
+        st.subheader("📚 Histórico Completo de Correções (Por Período)")
         
         ITENS_POR_PAGINA = 20
         total_linhas = len(df)

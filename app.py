@@ -28,7 +28,8 @@ def carregar_dados():
         
         if not df.empty:
             df['Data Real'] = pd.to_datetime(df['Data da Aula'], format='%d-%m-%Y', errors='coerce').dt.date
-            df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.pdf', expand=False)
+            # Ajustado regex para aceitar tanto .pdf antigo quanto .txt novo no nome do arquivo
+            df['Professor'] = df['Arquivo de Origem'].str.extract(r'\d{2}-\d{2}-\d{4}-([^\.]+)\.(?:pdf|txt)', expand=False)
             df['Professor'] = df['Professor'].str.title().fillna("Sem Nome")
             df = df.sort_values(by="Data Real", ascending=False)
             
@@ -81,9 +82,10 @@ def chamar_gemini(frase, dica):
 df = carregar_dados()
 df_original = df.copy() 
 
+# --- ALTERAÇÃO DO BOTÃO PARA PROVESSAR TXT ---
 st.sidebar.header("⚙️ Ações")
-if st.sidebar.button("🚀 Processar Novos PDFs"):
-    with st.spinner("Lendo PDFs e acionando a Inteligência Artificial... Aguarde."):
+if st.sidebar.button("🚀 Processar Novos TXTs"):
+    with st.spinner("Lendo arquivos TXT e acionando a Inteligência Artificial... Aguarde."):
         try:
             resposta = requests.get(URL_APPS_SCRIPT)
             if "Sucesso" in resposta.text:
@@ -93,7 +95,7 @@ if st.sidebar.button("🚀 Processar Novos PDFs"):
             else:
                 st.sidebar.error("Erro. O Apps Script retornou uma falha.")
         except Exception as e:
-            st.sidebar.error(f"Falha ao conectar com o Google: {e}")
+            st.sidebar.sidebar.error(f"Falha ao conectar com o Google: {e}")
 
 st.sidebar.markdown("---")
 
@@ -166,6 +168,7 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty:
     st.info("Nenhum erro encontrado para os filtros selecionados (Foco/Data/Professor).")
 else:
+    # MÈTRICAS PRINCIPAIS
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total de Erros (Filtro)", len(df))
@@ -175,6 +178,43 @@ else:
     with col3:
         professores_vistos = ", ".join(df["Professor"].unique())
         st.metric("Professor(es)", professores_vistos)
+
+    # --- NOVO BLOCO: ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
+    st.markdown("---")
+    st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
+    
+    # Verifica se existem os dados de contagem de palavras nas colunas novas
+    if 'Palavras Aluno' in df.columns and 'Palavras Professor' in df.columns and not df['Palavras Aluno'].dropna().empty:
+        total_palavras_danilo = pd.to_numeric(df['Palavras Aluno'], errors='coerce').sum()
+        total_palavras_tutor = pd.to_numeric(df['Palavras Professor'], errors='coerce').sum()
+        
+        if total_palavras_danilo > 0 or total_palavras_tutor > 0:
+            # Cálculo linguístico: Média de 140 palavras por minuto
+            minutos_danilo = round(total_palavras_danilo / 140, 1)
+            minutos_tutor = round(total_palavras_tutor / 140, 1)
+            
+            col_talk1, col_talk2 = st.columns([1, 2])
+            with col_talk1:
+                st.metric("Seu Tempo de Fala Estimado", f"⏱️ {minutos_danilo} min")
+                st.metric("Tempo do Professor Estimado", f"⏱️ {minutos_tutor} min")
+            with col_talk2:
+                # Desenha o gráfico de pizza (Donut Chart) dinâmico
+                dados_pizza = pd.DataFrame({
+                    "Quem Falou": ["Danilo (Você)", "Professor"],
+                    "Minutos": [minutos_danilo, minutos_tutor]
+                })
+                st.caption("Proporção de conversa baseada no volume de termos ditos:")
+                st.vega_lite_chart(dados_pizza, {
+                    'mark': {'type': 'arc', 'innerRadius': 50},
+                    'encoding': {
+                        'theta': {'field': 'Minutos', 'type': 'quantitative'},
+                        'color': {'field': 'Quem Falou', 'type': 'nominal', 'scale': {'range': ['#2b5c8f', '#2ca02c']}}
+                    }
+                }, use_container_width=True)
+        else:
+            st.info("Os arquivos TXT selecionados ainda não possuem histórico de volumetria de áudio calculado.")
+    else:
+        st.info("💡 As estatísticas de tempo de fala aparecerão aqui assim que você processar as novas aulas no formato .txt")
 
     st.markdown("### 📊 Volume de Erros por Categoria")
     contagem_categorias = df['Tipo de Erro'].value_counts()
@@ -198,11 +238,9 @@ else:
     
     if professor_selecionado == "Todos":
         st.subheader("🔥 Top Erros Mais Recorrentes (Foco Ativo)")
-        st.write("Análise de recorrência baseada no seu Modo de Foco atual para todos os professores.")
         df_top_erros = df_original.copy()
     else:
         st.subheader(f"🔥 Top Erros Mais Recorrentes (com {professor_selecionado})")
-        st.write(f"Análise de recorrência focada no tema selecionado com o(a) tutor(a) {professor_selecionado}.")
         df_top_erros = df_original[df_original['Professor'] == professor_selecionado]
         
     top_n = st.selectbox("Quantidade de erros para exibir no ranking:", [5, 6, 7, 8, 9, 10])
@@ -267,7 +305,6 @@ else:
         
         for _, grupo in grupos_aula.iterrows():
             prof = grupo['Professor']
-            # --- CORRIGIDO: de 'group' para 'grupo' ---
             data_aula = grupo['Data da Aula'] 
             
             st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")

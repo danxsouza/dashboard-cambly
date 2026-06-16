@@ -13,7 +13,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
 
 @st.cache_data(ttl=60)
 def carregar_dados():

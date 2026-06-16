@@ -13,7 +13,7 @@ st.set_page_config(page_title="Meu Dashboard de Inglês", layout="wide")
 st.title("📊 Análise de Aulas - Cambly")
 
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
-URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
+URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec"
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -206,10 +206,11 @@ else:
                     texto_url = urllib.parse.quote(frase_correta)
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                    link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                     
                     st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor}]**")
                     st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                    st.markdown(f"  🎧 **Ouça nativos:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    st.markdown(f"  🎧 **Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     st.write("---")
 
         st.markdown("---")
@@ -232,7 +233,6 @@ else:
         st.caption(f"Exibindo itens {inicio + 1} a {min(fim, total_linhas)} de {total_linhas} correções.")
 
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
-            # --- ATUALIZAÇÃO: AGRUPANDO POR PROFESSOR E DATA ---
             grupos_aula = df_paginado[['Professor', 'Data da Aula']].drop_duplicates()
             
             for _, grupo in grupos_aula.iterrows():
@@ -247,13 +247,15 @@ else:
                     with st.expander(f"📖 {row['Frase com Erro']}"):
                         frase_correta = row['Como Falar Corretamente']
                         dica_estudo = row['Explicação e Dica de Estudo']
+                        
                         texto_url = urllib.parse.quote(frase_correta)
                         link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                         link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                         
                         st.success(f"**Como falar corretamente:** {frase_correta}")
                         st.info(f"**Dica de Estudo:** {dica_estudo}")
-                        st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                         
                         chave_sessao = f"exemplos_cal_{index}"
                         if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
@@ -275,10 +277,11 @@ else:
                     texto_url = urllib.parse.quote(frase_correta)
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                    link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
                     
                     st.success(f"**Como falar corretamente:** {frase_correta}")
                     st.info(f"**Dica de Estudo:** {dica_estudo}")
-                    st.markdown(f"**Ouça nativos falando:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    st.markdown(f"**Pratique e entenda:** [🎬 PlayPhrase.me]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Google Tradutor]({link_gtranslate})")
                     
                     chave_sessao = f"exemplos_list_{index}"
                     if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):

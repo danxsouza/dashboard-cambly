@@ -139,7 +139,7 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty and df_conversacao.empty:
     st.info("Nenhum registro encontrado para os filtros selecionados.")
 else:
-    # --- DIVISÃO DOS DADOS: AUDIO vs CHAT ---
+    # Separação dos dados: Áudio vs Chat
     df_chat = df[df['Tipo de Erro'].astype(str).str.contains('💬', na=False) | df['Tipo de Erro'].astype(str).str.contains('Chat', case=False, na=False)]
     df_erros_audio = df[~(df['Tipo de Erro'].astype(str).str.contains('💬', na=False) | df['Tipo de Erro'].astype(str).str.contains('Chat', case=False, na=False))]
 
@@ -227,20 +227,41 @@ else:
                         st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                         st.write("---")
 
-    # --- NOVO: BLOCO EXCLUSIVO PARA O CHAT DO PROFESSOR ---
+    # --- BLOCO EXCLUSIVO PARA O CHAT DO PROFESSOR (COMPACTADO COM RECURSOS EXTRA) ---
     if professor_selecionado != "Todos":
         if not df_chat.empty:
             st.markdown("---")
             st.subheader(f"💬 Notas e Vocabulário do Chat ({professor_selecionado})")
             
             for index, row in df_chat.iterrows():
-                with st.container():
-                    st.markdown(f"**👩‍🏫 O que {professor_selecionado} enviou no chat:**")
-                    st.markdown(f"> `{row['Frase com Erro']}`")
-                    st.success(f"**Tradução / Significado:** {row['Como Falar Corretamente']}")
-                    st.info(f"**Explicação e Exemplos:**\n{row['Explicação e Dica de Estudo']}")
-                    st.caption(f"📅 Registrado na aula do dia: {row['Data da Aula']}")
-                    st.markdown("<br>", unsafe_allow_html=True)
+                termo_chat = row['Frase com Erro']
+                significado_chat = row['Como Falar Corretamente']
+                dica_chat = row['Explicação e Dica de Estudo']
+                
+                # Prepara links de escuta e pronúncia baseados no termo em inglês enviado no chat
+                texto_url_chat = urllib.parse.quote(termo_chat)
+                link_playphrase_chat = f"https://www.playphrase.me/#/search?q={texto_url_chat}"
+                link_youglish_chat = f"https://pt.youglish.com/pronounce/{texto_url_chat}/english"
+                
+                # Título expansível elegante
+                titulo_chat_expander = f"💬 [Chat] {termo_chat}"
+                
+                with st.expander(titulo_chat_expander):
+                    st.success(f"**Definição / Tradução:** {significado_chat}")
+                    st.info(f"**Explicação e Exemplos Iniciais:**\n{dica_chat}")
+                    st.markdown(f"**Pratique o termo do chat:** [🎬 PlayPhrase]({link_playphrase_chat}) | [🗣️ YouGlish]({link_youglish_chat})")
+                    
+                    # Motor de IA para gerar novos exemplos sob demanda
+                    chave_sessao_chat = f"exemplos_chat_{index}"
+                    if st.button("💡 Gerar mais 3 exemplos de uso", key=f"btn_chat_{index}"):
+                        with st.spinner("Conectando ao Gemini..."):
+                            st.session_state[chave_sessao_chat] = chamar_gemini(termo_chat, dica_chat)
+                            
+                    if chave_sessao_chat in st.session_state:
+                        st.markdown("---")
+                        st.markdown(st.session_state[chave_sessao_chat])
+                        
+                    st.caption(f"📅 Aula do dia: {row['Data da Aula']} | Origem: {row['Arquivo de Origem']}")
         else:
             st.markdown("---")
             st.subheader(f"💬 Notas e Vocabulário do Chat ({professor_selecionado})")
@@ -270,10 +291,10 @@ else:
         if modo_visualizacao == "Escolher Data no Calendário" and professor_selecionado == "Todos":
             grupos_aula = df_paginado[['Professor', 'Data da Aula']].drop_duplicates()
             
-            for _, grupo in grupos_aula.iterrows():
-                prof = grupo['Professor']
+            for _, group in grupos_aula.iterrows():
+                prof = group['Professor']
                 if prof == "Sem Nome": continue
-                data_aula = grupo['Data da Aula'] 
+                data_aula = group['Data da Aula'] 
                 
                 st.markdown(f"### 👨‍🏫 Aula com {prof} 📅 {data_aula}")
                 df_prof = df_paginado[(df_paginado['Professor'] == prof) & (df_paginado['Data da Aula'] == data_aula)]

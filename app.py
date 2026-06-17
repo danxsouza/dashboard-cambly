@@ -15,6 +15,14 @@ st.title("📊 Análise de Aulas - Cambly")
 # --- LEMBRETE: COLOQUE APENAS A URL DO GOOGLE AQUI ---
 URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbyPYXxhH0FlZpk6i55x9c7_FtAVV-PxdQ2c2HWHpZPrPbaglS7G6eqaCkpCzT3wyumO/exec" 
 
+# --- INICIALIZAÇÃO DE MEMÓRIA PARA PERMITIR RESET DOS FILTROS ---
+if "opcao_foco" not in st.session_state:
+    st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
+if "modo_visualizacao" not in st.session_state:
+    st.session_state["modo_visualizacao"] = "Todas as Aulas"
+if "professor_selecionado" not in st.session_state:
+    st.session_state["professor_selecionado"] = "Todos"
+
 @st.cache_data(ttl=60)
 def carregar_dados():
     try:
@@ -64,6 +72,7 @@ def chamar_gemini(frase, dica):
 df_original = carregar_dados()
 df = df_original.copy() 
 
+# --- SEÇÃO DE AÇÕES DO MENU LATERAL ---
 st.sidebar.header("⚙️ Ações")
 if st.sidebar.button("🚀 Processar Novos TXTs"):
     with st.spinner("Lendo arquivos TXT e acionando a Inteligência Artificial... Aguarde."):
@@ -78,12 +87,22 @@ if st.sidebar.button("🚀 Processar Novos TXTs"):
         except Exception as e:
             st.sidebar.error(f"Falha ao conectar com o Google: {e}")
 
+# --- NOVO: BOTÃO DE INTEGRAÇÃO PARA LIMPAR TODOS OS FILTROS DE UMA VEZ ---
+if st.sidebar.button("🧹 Limpar Todos os Filtros"):
+    st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
+    st.session_state["modo_visualizacao"] = "Todas as Aulas"
+    st.session_state["professor_selecionado"] = "Todos"
+    if "data_key" in st.session_state:
+        del st.session_state["data_key"]  # Reseta o calendário para a data máxima padrão
+    st.rerun()
+
 st.sidebar.markdown("---")
 
 st.sidebar.header("🎯 Modo de Foco Intensivo")
 opcao_foco = st.sidebar.radio(
     "Escolha um objetivo de estudo:",
-    ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"]
+    ["Desativado (Ver Tudo)", "⏳ Erros no Passado", "🗺️ Erros de Preposição"],
+    key="opcao_foco"
 )
 
 st.sidebar.markdown("---")
@@ -92,14 +111,22 @@ st.sidebar.header("📅 Filtros de Aula")
 if df_original.empty:
     st.sidebar.warning("Nenhuma aula encontrada na base de dados.")
 else:
-    modo_visualizacao = st.sidebar.radio("Período de Estudo:", ["Todas as Aulas", "Escolher Data no Calendário"])
+    modo_visualizacao = st.sidebar.radio(
+        "Período de Estudo:", 
+        ["Todas as Aulas", "Escolher Data no Calendário"],
+        key="modo_visualizacao"
+    )
     
     data_inicio = df_original['Data Real'].min()
     data_fim = df_original['Data Real'].max()
     
     if modo_visualizacao == "Escolher Data no Calendário" and not df.empty:
         data_padrao = df_original['Data Real'].max()
-        data_selecionada = st.sidebar.date_input("Selecione o período:", value=(data_padrao, data_padrao))
+        data_selecionada = st.sidebar.date_input(
+            "Selecione o período:", 
+            value=(data_padrao, data_padrao),
+            key="data_key"
+        )
         
         if isinstance(data_selecionada, tuple):
             if len(data_selecionada) == 2:
@@ -111,7 +138,11 @@ else:
 
     professores_disponiveis = [p for p in df_original['Professor'].unique().tolist() if p and p != "Sem Nome"]
     professores_disponiveis.sort() 
-    professor_selecionado = st.sidebar.selectbox("👨‍🏫 Filtrar por Professor", ["Todos"] + professores_disponiveis)
+    professor_selecionado = st.sidebar.selectbox(
+        "👨‍🏫 Filtrar por Professor", 
+        ["Todos"] + professores_disponiveis,
+        key="professor_selecionado"
+    )
 
     # DataFrame Isolado para o Talk Time (ignora o foco de erros)
     df_conversacao = df_original.copy()
@@ -227,7 +258,7 @@ else:
                         st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                         st.write("---")
 
-    # --- BLOCO EXCLUSIVO PARA O CHAT DO PROFESSOR (COMPACTADO COM RECURSOS EXTRA) ---
+    # --- BLOCO EXCLUSIVO PARA O CHAT DO PROFESSOR ---
     if professor_selecionado != "Todos":
         if not df_chat.empty:
             st.markdown("---")
@@ -238,12 +269,10 @@ else:
                 significado_chat = row['Como Falar Corretamente']
                 dica_chat = row['Explicação e Dica de Estudo']
                 
-                # Prepara links de escuta e pronúncia baseados no termo em inglês enviado no chat
                 texto_url_chat = urllib.parse.quote(termo_chat)
                 link_playphrase_chat = f"https://www.playphrase.me/#/search?q={texto_url_chat}"
                 link_youglish_chat = f"https://pt.youglish.com/pronounce/{texto_url_chat}/english"
                 
-                # Título expansível elegante
                 titulo_chat_expander = f"💬 [Chat] {termo_chat}"
                 
                 with st.expander(titulo_chat_expander):
@@ -251,7 +280,6 @@ else:
                     st.info(f"**Explicação e Exemplos Iniciais:**\n{dica_chat}")
                     st.markdown(f"**Pratique o termo do chat:** [🎬 PlayPhrase]({link_playphrase_chat}) | [🗣️ YouGlish]({link_youglish_chat})")
                     
-                    # Motor de IA para gerar novos exemplos sob demanda
                     chave_sessao_chat = f"exemplos_chat_{index}"
                     if st.button("💡 Gerar mais 3 exemplos de uso", key=f"btn_chat_{index}"):
                         with st.spinner("Conectando ao Gemini..."):

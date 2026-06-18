@@ -116,11 +116,11 @@ else:
         key="modo_visualizacao"
     )
     
-    data_inicio = df_original['Data Real'].min()
-    data_fim = df_original['Data Real'].max()
+    data_inicio = df_original['Data Real'].dropna().min()
+    data_fim = df_original['Data Real'].dropna().max()
     
     if modo_visualizacao == "Escolher Data no Calendário" and not df.empty:
-        data_padrao = df_original['Data Real'].max()
+        data_padrao = df_original['Data Real'].dropna().max()
         data_selecionada = st.sidebar.date_input(
             "Selecione o período:", 
             value=(data_padrao, data_padrao),
@@ -143,23 +143,27 @@ else:
         key="professor_selecionado"
     )
 
-    # DataFrame Isolado para o Talk Time (Mantém as linhas N/A para não perder os minutos de fala)
+    # --- APLICAÇÃO CRÍTICA DE FILTROS: CALENDÁRIO + PROFESSOR ---
     df_conversacao = df_original.copy()
+    
+    # 1. Filtro de Data (Isolado e Absoluto)
     if modo_visualizacao == "Escolher Data no Calendário":
         df_conversacao = df_conversacao[(df_conversacao["Data Real"] >= data_inicio) & (df_conversacao["Data Real"] <= data_fim)]
+        
+    # 2. Filtro de Professor (Isolado e Absoluto)
     if professor_selecionado != "Todos":
         df_conversacao = df_conversacao[df_conversacao["Professor"] == professor_selecionado]
 
-    # Aplicação dos filtros no DataFrame de Erros Principal
+    # --- APLICAÇÃO DOS FILTROS NO DATAFRAME DE ERROS PRINCIPAL ---
     if modo_visualizacao == "Escolher Data no Calendário":
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
         
     if opcao_foco == "⏳ Erros no Passado":
         filtro_termo = r'passado|past|was|were|did|\bed\b|irregular'
-        df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+        df = df[df['Explicação e Dica de Estudo'].astype(str).str.contains(filtro_termo, case=False, na=False)]
     elif opcao_foco == "🗺️ Erros de Preposição":
         filtro_termo = r'preposição|preposition|\bin\b|\bon\b|\bat\b|\bto\b|\bfrom\b|\bfor\b|\bwith\b|regência'
-        df = df[df['Explicação e Dica de Estudo'].str.contains(filtro_termo, case=False, na=False)]
+        df = df[df['Explicação e Dica de Estudo'].astype(str).str.contains(filtro_termo, case=False, na=False)]
 
     if professor_selecionado != "Todos":
         df = df[df["Professor"] == professor_selecionado]
@@ -181,18 +185,23 @@ else:
         st.metric("Total de Itens Estudados", len(df_visual))
     with col2:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
-        st.metric("Professor(es)", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
+        st.metric("Professor(es) no Período", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME EM HORAS E MINUTOS) ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) COM GRÁFICO DINÂMICO ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
-        df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].str.contains('-chat-', case=False, na=False)]
+        # Pega apenas os dados de áudio para o Talk Time
+        df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].astype(str).str.contains('-chat-', case=False, na=False)]
         df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem'])
         
-        total_palavras_danilo = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0).sum()
-        total_palavras_tutor = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0).sum()
+        # Converte as colunas para números
+        df_aulas_unicas['Palavras Aluno'] = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0)
+        df_aulas_unicas['Palavras Professor'] = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0)
+        
+        total_palavras_danilo = df_aulas_unicas['Palavras Aluno'].sum()
+        total_palavras_tutor = df_aulas_unicas['Palavras Professor'].sum()
         
         if total_palavras_danilo > 0 or total_palavras_tutor > 0:
             total_palavras_geral = total_palavras_danilo + total_palavras_tutor
@@ -200,7 +209,6 @@ else:
             perc_danilo = round((total_palavras_danilo / total_palavras_geral) * 100, 1)
             perc_tutor = round((total_palavras_tutor / total_palavras_geral) * 100, 1)
             
-            # Cálculos de minutos e horas
             minutos_danilo = round(total_palavras_danilo / 140, 1)
             horas_danilo = round(minutos_danilo / 60, 1)
             
@@ -209,18 +217,33 @@ else:
             
             nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor(es)"
             
+            # --- CONSTRUÇÃO DO GRÁFICO DE PIZZA DINÂMICO ---
+            dados_para_pizza = []
+            dados_para_pizza.append({"Quem Falou": f"Danilo ({perc_danilo}%)", "Minutos": minutos_danilo})
+            
+            if professor_selecionado == "Todos":
+                # Se for todos, quebra o gráfico criando uma fatia por professor que deu aula no período
+                professores_agrupados = df_aulas_unicas.groupby('Professor')['Palavras Professor'].sum()
+                for prof_nome, qtd_palavras in professores_agrupados.items():
+                    if qtd_palavras > 0:
+                        min_prof = round(qtd_palavras / 140, 1)
+                        perc_prof = round((qtd_palavras / total_palavras_geral) * 100, 1)
+                        dados_para_pizza.append({"Quem Falou": f"{prof_nome} ({perc_prof}%)", "Minutos": min_prof})
+            else:
+                # Se for um específico, exibe apenas ele
+                dados_para_pizza.append({"Quem Falou": f"{nome_label_prof} ({perc_tutor}%)", "Minutos": minutos_tutor})
+                
+            df_pizza = pd.DataFrame(dados_para_pizza)
+            
+            # Renderização da tela
             col_talk1, col_talk2 = st.columns([1, 2])
             with col_talk1:
-                # O Metric possui um Valor Principal (Value) e uma Legenda (Delta). 
-                # Valor Principal exibirá: 1.5h (90 min)
-                # A legenda exibirá as Palavras Totais e a % da conversa.
                 st.metric(
                     label="Seu Tempo de Fala", 
                     value=f"⏱️ {horas_danilo}h ({minutos_danilo} min)", 
                     delta=f"🗣️ {int(total_palavras_danilo)} palavras | {perc_danilo}% do tempo", 
                     delta_color="off"
                 )
-                
                 st.metric(
                     label=f"Tempo de Fala - {nome_label_prof}", 
                     value=f"⏱️ {horas_tutor}h ({minutos_tutor} min)", 
@@ -228,15 +251,16 @@ else:
                     delta_color="off"
                 )
             with col_talk2:
-                dados_pizza = pd.DataFrame({
-                    "Quem Falou": [f"Danilo ({perc_danilo}%)", f"{nome_label_prof} ({perc_tutor}%)"],
-                    "Minutos": [minutos_danilo, minutos_tutor]
-                })
-                st.vega_lite_chart(dados_pizza, {
+                # O scale de cores foi expandido para dar suporte a múltiplos professores em cores automáticas
+                st.vega_lite_chart(df_pizza, {
                     'mark': {'type': 'arc', 'innerRadius': 40, 'tooltip': True},
                     'encoding': {
                         'theta': {'field': 'Minutos', 'type': 'quantitative'},
-                        'color': {'field': 'Quem Falou', 'type': 'nominal', 'scale': {'range': ['#2b5c8f', '#2ca02c']}}
+                        'color': {
+                            'field': 'Quem Falou', 
+                            'type': 'nominal', 
+                            'scale': {'range': ['#2b5c8f', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b']}
+                        }
                     }
                 }, width="stretch")
         else:

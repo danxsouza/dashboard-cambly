@@ -154,6 +154,23 @@ else:
     if professor_selecionado != "Todos":
         df_conversacao = df_conversacao[df_conversacao["Professor"] == professor_selecionado]
 
+    # --- NOVO: RESUMO CRONOLÓGICO DA AGENDA NO MENU LATERAL ---
+    if modo_visualizacao == "Escolher Data no Calendário" and not df_conversacao.empty:
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("🗓️ **Resumo de Aulas no Período:**")
+        
+        # Pega as datas e professores, remove duplicatas (caso tenha arquivo de áudio e chat no mesmo dia) e ordena pela data (do mais antigo pro mais novo)
+        aulas_unicas = df_conversacao[['Data Real', 'Professor']].drop_duplicates().sort_values(by='Data Real', ascending=True)
+        dias_pt = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
+        
+        for _, row in aulas_unicas.iterrows():
+            data_obj = row['Data Real']
+            prof = row['Professor']
+            if prof != "Sem Nome":
+                dia_str = dias_pt[data_obj.weekday()]
+                data_str = data_obj.strftime("%d/%m/%Y")
+                st.sidebar.markdown(f"- `{data_str} ({dia_str})` - **{prof}**")
+
     # --- APLICAÇÃO DOS FILTROS NO DATAFRAME DE ERROS PRINCIPAL ---
     if modo_visualizacao == "Escolher Data no Calendário":
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
@@ -250,8 +267,7 @@ else:
                     delta_color="off"
                 )
             with col_talk2:
-                # A chave invisível 'description' no código abaixo OBRIGA o Streamlit a destruir e 
-                # redesenhar o gráfico toda vez que você altera a data ou o professor!
+                # A chave invisível 'description' OBRIGA o Streamlit a destruir e redesenhar o gráfico
                 st.vega_lite_chart(df_pizza, {
                     'description': f"Pizza_TalkTime_{professor_selecionado}_{data_inicio}_{data_fim}",
                     'mark': {'type': 'arc', 'innerRadius': 40, 'tooltip': True},

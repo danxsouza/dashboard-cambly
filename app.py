@@ -169,7 +169,6 @@ st.write("Acompanhe sua evolução, identifique padrões e escute como os nativo
 if df.empty and df_conversacao.empty:
     st.info("Nenhum registro encontrado para os filtros selecionados.")
 else:
-    # --- NOVO: FILTRO VISUAL INTELIGENTE ---
     # Remove as linhas fantasmas ("N/A") das listas de erros e chat
     df_visual = df[df['Frase com Erro'].astype(str).str.strip() != 'N/A']
 
@@ -179,17 +178,15 @@ else:
 
     col1, col2 = st.columns(2)
     with col1:
-        # Conta apenas os itens reais de estudo
         st.metric("Total de Itens Estudados", len(df_visual))
     with col2:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
         st.metric("Professor(es)", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME APRIMORADO) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
-    # O gráfico continua lendo o df_conversacao para garantir que aulas perfeitas somem no tempo
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
         df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].str.contains('-chat-', case=False, na=False)]
         df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem'])
@@ -198,22 +195,30 @@ else:
         total_palavras_tutor = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0).sum()
         
         if total_palavras_danilo > 0 or total_palavras_tutor > 0:
+            total_palavras_geral = total_palavras_danilo + total_palavras_tutor
+            
+            # Cálculo exato das porcentagens
+            perc_danilo = round((total_palavras_danilo / total_palavras_geral) * 100, 1)
+            perc_tutor = round((total_palavras_tutor / total_palavras_geral) * 100, 1)
+            
             minutos_danilo = round(total_palavras_danilo / 140, 1)
             minutos_tutor = round(total_palavras_tutor / 140, 1)
             
-            nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor"
+            nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor(es)"
             
             col_talk1, col_talk2 = st.columns([1, 2])
             with col_talk1:
-                st.metric("Seu Tempo de Fala", f"⏱️ {minutos_danilo} min")
-                st.metric(f"Tempo de Fala - {nome_label_prof}", f"⏱️ {minutos_tutor} min")
+                # delta_color="off" deixa as palavras em um cinza elegante, como informação extra
+                st.metric("Seu Tempo de Fala", f"⏱️ {minutos_danilo} min ({perc_danilo}%)", f"🗣️ {int(total_palavras_danilo)} palavras", delta_color="off")
+                st.metric(f"Tempo de Fala - {nome_label_prof}", f"⏱️ {minutos_tutor} min ({perc_tutor}%)", f"🗣️ {int(total_palavras_tutor)} palavras", delta_color="off")
             with col_talk2:
+                # Legenda do gráfico agora embute a sua porcentagem e do professor
                 dados_pizza = pd.DataFrame({
-                    "Quem Falou": ["Danilo (Você)", nome_label_prof],
+                    "Quem Falou": [f"Danilo ({perc_danilo}%)", f"{nome_label_prof} ({perc_tutor}%)"],
                     "Minutos": [minutos_danilo, minutos_tutor]
                 })
                 st.vega_lite_chart(dados_pizza, {
-                    'mark': {'type': 'arc', 'innerRadius': 40},
+                    'mark': {'type': 'arc', 'innerRadius': 40, 'tooltip': True},
                     'encoding': {
                         'theta': {'field': 'Minutos', 'type': 'quantitative'},
                         'color': {'field': 'Quem Falou', 'type': 'nominal', 'scale': {'range': ['#2b5c8f', '#2ca02c']}}
@@ -402,7 +407,6 @@ else:
                         st.session_state['pagina_atual'] += 1
                         st.rerun() 
     else:
-        # Se não tiver erros de áudio (mas tiver talk time), mostra uma mensagem de sucesso
         st.markdown("---")
         st.subheader("📚 Histórico de Correções de Áudio Filtrado")
         st.success(f"🎉 Excelente! A aula com {professor_selecionado} não teve nenhum erro gramatical grave registrado pela IA.")

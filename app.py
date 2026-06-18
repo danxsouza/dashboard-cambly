@@ -184,19 +184,19 @@ else:
     with col1:
         st.metric("Total de Itens Estudados", len(df_visual))
     with col2:
-        professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
+        professores_vistos = ", ".join([p for p in df_conversacao["Professor"].unique() if p != "Sem Nome"]) if not df_conversacao.empty else professor_selecionado
         st.metric("Professor(es) no Período", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) COM GRÁFICO DINÂMICO ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) COM GRÁFICO DINÂMICO E BLINDADO ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
-        # Pega apenas os dados de áudio para o Talk Time
+        # Uso do .copy() garante que o fatiamento seja profundo, limpando a memória de dados anteriores
         df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].astype(str).str.contains('-chat-', case=False, na=False)]
-        df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem'])
+        df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem']).copy()
         
-        # Converte as colunas para números
+        # Converte as colunas para números de forma segura
         df_aulas_unicas['Palavras Aluno'] = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0)
         df_aulas_unicas['Palavras Professor'] = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0)
         
@@ -217,7 +217,7 @@ else:
             
             nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor(es)"
             
-            # --- CONSTRUÇÃO DO GRÁFICO DE PIZZA DINÂMICO ---
+            # --- CONSTRUÇÃO DO GRÁFICO DE PIZZA ---
             dados_para_pizza = []
             dados_para_pizza.append({"Quem Falou": f"Danilo ({perc_danilo}%)", "Minutos": minutos_danilo})
             
@@ -235,7 +235,6 @@ else:
                 
             df_pizza = pd.DataFrame(dados_para_pizza)
             
-            # Renderização da tela
             col_talk1, col_talk2 = st.columns([1, 2])
             with col_talk1:
                 st.metric(
@@ -251,8 +250,10 @@ else:
                     delta_color="off"
                 )
             with col_talk2:
-                # O scale de cores foi expandido para dar suporte a múltiplos professores em cores automáticas
+                # A chave invisível 'description' no código abaixo OBRIGA o Streamlit a destruir e 
+                # redesenhar o gráfico toda vez que você altera a data ou o professor!
                 st.vega_lite_chart(df_pizza, {
+                    'description': f"Pizza_TalkTime_{professor_selecionado}_{data_inicio}_{data_fim}",
                     'mark': {'type': 'arc', 'innerRadius': 40, 'tooltip': True},
                     'encoding': {
                         'theta': {'field': 'Minutos', 'type': 'quantitative'},

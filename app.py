@@ -22,6 +22,8 @@ if "modo_visualizacao" not in st.session_state:
     st.session_state["modo_visualizacao"] = "Todas as Aulas"
 if "professor_selecionado" not in st.session_state:
     st.session_state["professor_selecionado"] = "Todos"
+if "busca_global" not in st.session_state:
+    st.session_state["busca_global"] = ""
 
 @st.cache_data(ttl=60)
 def carregar_dados():
@@ -91,9 +93,15 @@ if st.sidebar.button("🧹 Limpar Todos os Filtros"):
     st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
     st.session_state["modo_visualizacao"] = "Todas as Aulas"
     st.session_state["professor_selecionado"] = "Todos"
+    st.session_state["busca_global"] = ""
     if "data_key" in st.session_state:
         del st.session_state["data_key"]  
     st.rerun()
+
+# --- NOVO: BUSCA GLOBAL ---
+st.sidebar.markdown("---")
+st.sidebar.header("🔍 Busca Global")
+termo_busca = st.sidebar.text_input("Procurar palavra ou frase...", key="busca_global", placeholder="Ex: present perfect, twist...")
 
 st.sidebar.markdown("---")
 
@@ -143,23 +151,19 @@ else:
         key="professor_selecionado"
     )
 
-    # --- APLICAÇÃO CRÍTICA DE FILTROS: CALENDÁRIO + PROFESSOR ---
     df_conversacao = df_original.copy()
     
-    # 1. Filtro de Data (Isolado e Absoluto)
     if modo_visualizacao == "Escolher Data no Calendário":
         df_conversacao = df_conversacao[(df_conversacao["Data Real"] >= data_inicio) & (df_conversacao["Data Real"] <= data_fim)]
         
-    # 2. Filtro de Professor (Isolado e Absoluto)
     if professor_selecionado != "Todos":
         df_conversacao = df_conversacao[df_conversacao["Professor"] == professor_selecionado]
 
-    # --- NOVO: RESUMO CRONOLÓGICO DA AGENDA NO MENU LATERAL ---
+    # --- RESUMO CRONOLÓGICO DA AGENDA NO MENU LATERAL ---
     if modo_visualizacao == "Escolher Data no Calendário" and not df_conversacao.empty:
         st.sidebar.markdown("---")
         st.sidebar.markdown("🗓️ **Resumo de Aulas no Período:**")
         
-        # Pega as datas e professores, remove duplicatas (caso tenha arquivo de áudio e chat no mesmo dia) e ordena pela data (do mais antigo pro mais novo)
         aulas_unicas = df_conversacao[['Data Real', 'Professor']].drop_duplicates().sort_values(by='Data Real', ascending=True)
         dias_pt = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
         
@@ -171,7 +175,7 @@ else:
                 data_str = data_obj.strftime("%d/%m/%Y")
                 st.sidebar.markdown(f"- `{data_str} ({dia_str})` - **{prof}**")
 
-    # --- APLICAÇÃO DOS FILTROS NO DATAFRAME DE ERROS PRINCIPAL ---
+    # Aplicação dos filtros no DataFrame de Erros
     if modo_visualizacao == "Escolher Data no Calendário":
         df = df[(df["Data Real"] >= data_inicio) & (df["Data Real"] <= data_fim)]
         
@@ -185,15 +189,74 @@ else:
     if professor_selecionado != "Todos":
         df = df[df["Professor"] == professor_selecionado]
 
+# =====================================================================
+# INTERCEPTADOR: MODO DE BUSCA GLOBAL ATIVO
+# =====================================================================
+if termo_busca.strip() != "":
+    termo = termo_busca.strip()
+    st.markdown(f"### 🔎 Resultados da Busca por: `{termo}`")
+    
+    # Procura a palavra em qualquer uma das colunas importantes na base original (ignorando os filtros laterais)
+    mask = (
+        df_original['Frase com Erro'].astype(str).str.contains(termo, case=False, na=False) |
+        df_original['Como Falar Corretamente'].astype(str).str.contains(termo, case=False, na=False) |
+        df_original['Explicação e Dica de Estudo'].astype(str).str.contains(termo, case=False, na=False) |
+        df_original['Tipo de Erro'].astype(str).str.contains(termo, case=False, na=False)
+    )
+    df_busca = df_original[mask]
+    df_busca = df_busca[df_busca['Frase com Erro'].astype(str).str.strip() != 'N/A'] # Esconde linhas vazias
+    
+    if df_busca.empty:
+        st.warning(f"Nenhum resultado encontrado para '**{termo}**' no seu histórico de aulas.")
+    else:
+        aulas_agrupadas = df_busca[['Data Real', 'Professor']].drop_duplicates().sort_values(by="Data Real", ascending=False)
+        st.success(f"Encontrado {len(df_busca)} registro(s) ao longo de {len(aulas_agrupadas)} aula(s).")
+        st.markdown("---")
+        
+        for _, row in aulas_agrupadas.iterrows():
+            d = row['Data Real']
+            p = row['Professor']
+            itens_aula = df_busca[(df_busca['Data Real'] == d) & (df_busca['Professor'] == p)]
+            
+            with st.container():
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    dias_pt = {0: 'Seg', 1: 'Ter', 2: 'Qua', 3: 'Qui', 4: 'Sex', 5: 'Sáb', 6: 'Dom'}
+                    dia_str = dias_pt[d.weekday()]
+                    st.markdown(f"#### 👨‍🏫 Aula com {p} - 📅 {d.strftime('%d/%m/%Y')} ({dia_str})")
+                    st.caption(f"📌 {len(itens_aula)} menção(ões) encontrada(s)")
+                with col2:
+                    # Botão mágico que ajusta os filtros e leva para a aula!
+                    if st.button("Ir para esta Aula ➔", key=f"btn_go_{p}_{d}", use_container_width=True):
+                        st.session_state["modo_visualizacao"] = "Escolher Data no Calendário"
+                        st.session_state["data_key"] = (d, d)
+                        st.session_state["professor_selecionado"] = p
+                        st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
+                        st.session_state["busca_global"] = "" # Limpa a caixa de pesquisa
+                        st.rerun()
+                
+                for idx, r in itens_aula.iterrows():
+                    emoji = "💬" if "Chat" in str(r['Tipo de Erro']) else "📖"
+                    st.markdown(
+                        f"<div style='padding:10px; border-left:3px solid #1E90FF; background-color:rgba(128,128,128,0.05); margin-bottom:5px; border-radius:4px;'>"
+                        f"<b>{emoji} [{r['Tipo de Erro']}]</b> {r['Frase com Erro']}<br>"
+                        f"<span style='color:#2ca02c;'>✅ <b>Correção/Significado:</b> {r['Como Falar Corretamente']}</span>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
+                st.write("")
+    
+    # Interrompe o carregamento do restante do dashboard para focar na pesquisa
+    st.stop()
+# =====================================================================
+
 st.write("Acompanhe sua evolução, identifique padrões e escute como os nativos falam.")
 
 if df.empty and df_conversacao.empty:
     st.info("Nenhum registro encontrado para os filtros selecionados.")
 else:
-    # Remove as linhas fantasmas ("N/A") das listas de erros e chat
     df_visual = df[df['Frase com Erro'].astype(str).str.strip() != 'N/A']
 
-    # Separação dos dados limpos: Áudio vs Chat
     df_chat = df_visual[df_visual['Tipo de Erro'].astype(str).str.contains('💬', na=False) | df_visual['Tipo de Erro'].astype(str).str.contains('Chat', case=False, na=False)]
     df_erros_audio = df_visual[~(df_visual['Tipo de Erro'].astype(str).str.contains('💬', na=False) | df_visual['Tipo de Erro'].astype(str).str.contains('Chat', case=False, na=False))]
 
@@ -204,16 +267,13 @@ else:
         professores_vistos = ", ".join([p for p in df_conversacao["Professor"].unique() if p != "Sem Nome"]) if not df_conversacao.empty else professor_selecionado
         st.metric("Professor(es) no Período", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME) COM GRÁFICO DINÂMICO E BLINDADO ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
     if 'Palavras Aluno' in df_conversacao.columns and 'Palavras Professor' in df_conversacao.columns:
-        # Uso do .copy() garante que o fatiamento seja profundo, limpando a memória de dados anteriores
         df_aulas_reais = df_conversacao[~df_conversacao['Arquivo de Origem'].astype(str).str.contains('-chat-', case=False, na=False)]
         df_aulas_unicas = df_aulas_reais.drop_duplicates(subset=['Arquivo de Origem']).copy()
         
-        # Converte as colunas para números de forma segura
         df_aulas_unicas['Palavras Aluno'] = pd.to_numeric(df_aulas_unicas['Palavras Aluno'], errors='coerce').fillna(0)
         df_aulas_unicas['Palavras Professor'] = pd.to_numeric(df_aulas_unicas['Palavras Professor'], errors='coerce').fillna(0)
         
@@ -234,12 +294,10 @@ else:
             
             nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor(es)"
             
-            # --- CONSTRUÇÃO DO GRÁFICO DE PIZZA ---
             dados_para_pizza = []
             dados_para_pizza.append({"Quem Falou": f"Danilo ({perc_danilo}%)", "Minutos": minutos_danilo})
             
             if professor_selecionado == "Todos":
-                # Se for todos, quebra o gráfico criando uma fatia por professor que deu aula no período
                 professores_agrupados = df_aulas_unicas.groupby('Professor')['Palavras Professor'].sum()
                 for prof_nome, qtd_palavras in professores_agrupados.items():
                     if qtd_palavras > 0:
@@ -247,7 +305,6 @@ else:
                         perc_prof = round((qtd_palavras / total_palavras_geral) * 100, 1)
                         dados_para_pizza.append({"Quem Falou": f"{prof_nome} ({perc_prof}%)", "Minutos": min_prof})
             else:
-                # Se for um específico, exibe apenas ele
                 dados_para_pizza.append({"Quem Falou": f"{nome_label_prof} ({perc_tutor}%)", "Minutos": minutos_tutor})
                 
             df_pizza = pd.DataFrame(dados_para_pizza)
@@ -267,7 +324,6 @@ else:
                     delta_color="off"
                 )
             with col_talk2:
-                # A chave invisível 'description' OBRIGA o Streamlit a destruir e redesenhar o gráfico
                 st.vega_lite_chart(df_pizza, {
                     'description': f"Pizza_TalkTime_{professor_selecionado}_{data_inicio}_{data_fim}",
                     'mark': {'type': 'arc', 'innerRadius': 40, 'tooltip': True},
@@ -285,7 +341,6 @@ else:
     else:
         st.info("💡 As estatísticas aparecerão quando dados em .txt forem integrados na planilha.")
 
-    # --- TOP ERROS RECORRENTES ---
     if not df_erros_audio.empty:
         st.markdown("---")
         st.subheader("🔥 Top Erros Mais Recorrentes (Apenas Áudio)")
@@ -324,7 +379,6 @@ else:
                         st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
                         st.write("---")
 
-    # --- BLOCO EXCLUSIVO PARA O CHAT DO PROFESSOR ---
     if professor_selecionado != "Todos":
         if not df_chat.empty:
             st.markdown("---")
@@ -361,7 +415,6 @@ else:
             st.subheader(f"💬 Notas e Vocabulário do Chat ({professor_selecionado})")
             st.info(f"Nenhum vocabulário relevante registrado no chat com {professor_selecionado} neste período.")
 
-    # --- HISTÓRICO DE CORREÇÕES (APENAS ÁUDIO) ---
     if not df_erros_audio.empty:
         st.markdown("---")
         st.subheader("📚 Histórico de Correções de Áudio Filtrado")
@@ -448,7 +501,7 @@ else:
             col_esp1, col_ant, col_pag, col_prox, col_esp2 = st.columns([3.8, 0.8, 1.4, 0.8, 3.8])
             with col_ant:
                 if st.session_state['pagina_atual'] > 1:
-                    if st.button("⏪ Ant", width="stretch"):
+                    if st.button("⏪ Ant", use_container_width=True):
                         st.session_state['pagina_atual'] -= 1
                         st.rerun() 
             with col_pag:
@@ -459,7 +512,7 @@ else:
                 )
             with col_prox:
                 if st.session_state['pagina_atual'] < total_paginas:
-                    if st.button("Prox ⏩", width="stretch"):
+                    if st.button("Prox ⏩", use_container_width=True):
                         st.session_state['pagina_atual'] += 1
                         st.rerun() 
     else:

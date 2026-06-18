@@ -183,7 +183,7 @@ else:
         professores_vistos = ", ".join([p for p in df["Professor"].unique() if p != "Sem Nome"]) if not df.empty else professor_selecionado
         st.metric("Professor(es)", professores_vistos if professores_vistos != "Todos" else "Nenhum no foco")
 
-    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME APRIMORADO) ---
+    # --- ESTATÍSTICAS DE CONVERSAÇÃO (TALK TIME EM HORAS E MINUTOS) ---
     st.markdown("---")
     st.subheader("🎙️ Estatísticas de Conversação Estimadas (Talk Time)")
     
@@ -197,22 +197,37 @@ else:
         if total_palavras_danilo > 0 or total_palavras_tutor > 0:
             total_palavras_geral = total_palavras_danilo + total_palavras_tutor
             
-            # Cálculo exato das porcentagens
             perc_danilo = round((total_palavras_danilo / total_palavras_geral) * 100, 1)
             perc_tutor = round((total_palavras_tutor / total_palavras_geral) * 100, 1)
             
+            # Cálculos de minutos e horas
             minutos_danilo = round(total_palavras_danilo / 140, 1)
+            horas_danilo = round(minutos_danilo / 60, 1)
+            
             minutos_tutor = round(total_palavras_tutor / 140, 1)
+            horas_tutor = round(minutos_tutor / 60, 1)
             
             nome_label_prof = f"{professor_selecionado} (Tutor)" if professor_selecionado != "Todos" else "Professor(es)"
             
             col_talk1, col_talk2 = st.columns([1, 2])
             with col_talk1:
-                # delta_color="off" deixa as palavras em um cinza elegante, como informação extra
-                st.metric("Seu Tempo de Fala", f"⏱️ {minutos_danilo} min ({perc_danilo}%)", f"🗣️ {int(total_palavras_danilo)} palavras", delta_color="off")
-                st.metric(f"Tempo de Fala - {nome_label_prof}", f"⏱️ {minutos_tutor} min ({perc_tutor}%)", f"🗣️ {int(total_palavras_tutor)} palavras", delta_color="off")
+                # O Metric possui um Valor Principal (Value) e uma Legenda (Delta). 
+                # Valor Principal exibirá: 1.5h (90 min)
+                # A legenda exibirá as Palavras Totais e a % da conversa.
+                st.metric(
+                    label="Seu Tempo de Fala", 
+                    value=f"⏱️ {horas_danilo}h ({minutos_danilo} min)", 
+                    delta=f"🗣️ {int(total_palavras_danilo)} palavras | {perc_danilo}% do tempo", 
+                    delta_color="off"
+                )
+                
+                st.metric(
+                    label=f"Tempo de Fala - {nome_label_prof}", 
+                    value=f"⏱️ {horas_tutor}h ({minutos_tutor} min)", 
+                    delta=f"🗣️ {int(total_palavras_tutor)} palavras | {perc_tutor}% do tempo", 
+                    delta_color="off"
+                )
             with col_talk2:
-                # Legenda do gráfico agora embute a sua porcentagem e do professor
                 dados_pizza = pd.DataFrame({
                     "Quem Falou": [f"Danilo ({perc_danilo}%)", f"{nome_label_prof} ({perc_tutor}%)"],
                     "Minutos": [minutos_danilo, minutos_tutor]

@@ -25,6 +25,15 @@ if "professor_selecionado" not in st.session_state:
 if "busca_global" not in st.session_state:
     st.session_state["busca_global"] = ""
 
+# --- CALLBACK PARA O BOTÃO MÁGICO DE BUSCA ---
+# Essa função dribla o erro do Streamlit aplicando os filtros antes de recarregar a tela
+def ir_para_aula(p, d):
+    st.session_state["modo_visualizacao"] = "Escolher Data no Calendário"
+    st.session_state["data_key"] = (d, d)
+    st.session_state["professor_selecionado"] = p
+    st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
+    st.session_state["busca_global"] = ""
+
 @st.cache_data(ttl=60)
 def carregar_dados():
     try:
@@ -196,7 +205,7 @@ if termo_busca.strip() != "":
     termo = termo_busca.strip()
     st.markdown(f"### 🔎 Resultados da Busca por: `{termo}`")
     
-    # Procura a palavra em qualquer uma das colunas importantes na base original (ignorando os filtros laterais)
+    # Procura a palavra em qualquer uma das colunas importantes
     mask = (
         df_original['Frase com Erro'].astype(str).str.contains(termo, case=False, na=False) |
         df_original['Como Falar Corretamente'].astype(str).str.contains(termo, case=False, na=False) |
@@ -204,7 +213,7 @@ if termo_busca.strip() != "":
         df_original['Tipo de Erro'].astype(str).str.contains(termo, case=False, na=False)
     )
     df_busca = df_original[mask]
-    df_busca = df_busca[df_busca['Frase com Erro'].astype(str).str.strip() != 'N/A'] # Esconde linhas vazias
+    df_busca = df_busca[df_busca['Frase com Erro'].astype(str).str.strip() != 'N/A'] 
     
     if df_busca.empty:
         st.warning(f"Nenhum resultado encontrado para '**{termo}**' no seu histórico de aulas.")
@@ -226,14 +235,14 @@ if termo_busca.strip() != "":
                     st.markdown(f"#### 👨‍🏫 Aula com {p} - 📅 {d.strftime('%d/%m/%Y')} ({dia_str})")
                     st.caption(f"📌 {len(itens_aula)} menção(ões) encontrada(s)")
                 with col2:
-                    # Botão mágico que ajusta os filtros e leva para a aula!
-                    if st.button("Ir para esta Aula ➔", key=f"btn_go_{p}_{d}", use_container_width=True):
-                        st.session_state["modo_visualizacao"] = "Escolher Data no Calendário"
-                        st.session_state["data_key"] = (d, d)
-                        st.session_state["professor_selecionado"] = p
-                        st.session_state["opcao_foco"] = "Desativado (Ver Tudo)"
-                        st.session_state["busca_global"] = "" # Limpa a caixa de pesquisa
-                        st.rerun()
+                    # ATUALIZAÇÃO AQUI: Uso do callback on_click que injeta os valores na memória sem quebrar a tela
+                    st.button(
+                        "Ir para esta Aula ➔", 
+                        key=f"btn_go_{p}_{d}", 
+                        on_click=ir_para_aula, 
+                        args=(p, d), 
+                        use_container_width=True
+                    )
                 
                 for idx, r in itens_aula.iterrows():
                     emoji = "💬" if "Chat" in str(r['Tipo de Erro']) else "📖"
@@ -246,7 +255,6 @@ if termo_busca.strip() != "":
                     )
                 st.write("")
     
-    # Interrompe o carregamento do restante do dashboard para focar na pesquisa
     st.stop()
 # =====================================================================
 

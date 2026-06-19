@@ -26,7 +26,6 @@ if "busca_global" not in st.session_state:
     st.session_state["busca_global"] = ""
 
 # --- CALLBACK PARA O BOTÃO MÁGICO DE BUSCA ---
-# Essa função dribla o erro do Streamlit aplicando os filtros antes de recarregar a tela
 def ir_para_aula(p, d):
     st.session_state["modo_visualizacao"] = "Escolher Data no Calendário"
     st.session_state["data_key"] = (d, d)
@@ -107,7 +106,7 @@ if st.sidebar.button("🧹 Limpar Todos os Filtros"):
         del st.session_state["data_key"]  
     st.rerun()
 
-# --- NOVO: BUSCA GLOBAL ---
+# --- BUSCA GLOBAL ---
 st.sidebar.markdown("---")
 st.sidebar.header("🔍 Busca Global")
 termo_busca = st.sidebar.text_input("Procurar palavra ou frase...", key="busca_global", placeholder="Ex: present perfect, twist...")
@@ -205,7 +204,6 @@ if termo_busca.strip() != "":
     termo = termo_busca.strip()
     st.markdown(f"### 🔎 Resultados da Busca por: `{termo}`")
     
-    # Procura a palavra em qualquer uma das colunas importantes
     mask = (
         df_original['Frase com Erro'].astype(str).str.contains(termo, case=False, na=False) |
         df_original['Como Falar Corretamente'].astype(str).str.contains(termo, case=False, na=False) |
@@ -235,7 +233,6 @@ if termo_busca.strip() != "":
                     st.markdown(f"#### 👨‍🏫 Aula com {p} - 📅 {d.strftime('%d/%m/%Y')} ({dia_str})")
                     st.caption(f"📌 {len(itens_aula)} menção(ões) encontrada(s)")
                 with col2:
-                    # ATUALIZAÇÃO AQUI: Uso do callback on_click que injeta os valores na memória sem quebrar a tela
                     st.button(
                         "Ir para esta Aula ➔", 
                         key=f"btn_go_{p}_{d}", 
@@ -351,7 +348,7 @@ else:
 
     if not df_erros_audio.empty:
         st.markdown("---")
-        st.subheader("🔥 Top Erros Mais Recorrentes (Apenas Áudio)")
+        st.subheader("🔥 Top Erros Mais Recorrentes")
         
         erros_frequentes = df_erros_audio['Explicação e Dica de Estudo'].value_counts().reset_index()
         erros_frequentes.columns = ['Explicação', 'Quantidade']
@@ -381,10 +378,13 @@ else:
                         texto_url = urllib.parse.quote(frase_correta)
                         link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                         link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                        link_oxford = f"https://www.oxfordlearnersdictionaries.com/search/english/?q={texto_url}"
+                        link_cambridge = f"https://dictionary.cambridge.org/search/english/direct/?q={texto_url}"
                         
                         st.markdown(f"- ❌ **Você disse:** {frase_errada} 🏷️ **[Prof: {professor} em {data_aula}]**")
                         st.markdown(f"  ✅ **O certo é:** {frase_correta}")
-                        st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        st.markdown(f"  🎧 **Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Tradutor]({link_gtranslate}) | [📚 Oxford]({link_oxford}) | [📖 Cambridge]({link_cambridge})")
                         st.write("---")
 
     if professor_selecionado != "Todos":
@@ -400,13 +400,16 @@ else:
                 texto_url_chat = urllib.parse.quote(termo_chat)
                 link_playphrase_chat = f"https://www.playphrase.me/#/search?q={texto_url_chat}"
                 link_youglish_chat = f"https://pt.youglish.com/pronounce/{texto_url_chat}/english"
+                link_gtranslate_chat = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url_chat}&op=translate"
+                link_oxford_chat = f"https://www.oxfordlearnersdictionaries.com/search/english/?q={texto_url_chat}"
+                link_cambridge_chat = f"https://dictionary.cambridge.org/search/english/direct/?q={texto_url_chat}"
                 
                 titulo_chat_expander = f"💬 [Chat] {termo_chat}"
                 
                 with st.expander(titulo_chat_expander):
                     st.success(f"**Definição / Tradução:** {significado_chat}")
                     st.info(f"**Explicação e Exemplos Iniciais:**\n{dica_chat}")
-                    st.markdown(f"**Pratique o termo do chat:** [🎬 PlayPhrase]({link_playphrase_chat}) | [🗣️ YouGlish]({link_youglish_chat})")
+                    st.markdown(f"**Pratique o termo:** [🎬 PlayPhrase]({link_playphrase_chat}) | [🗣️ YouGlish]({link_youglish_chat}) | [🌐 Tradutor]({link_gtranslate_chat}) | [📚 Oxford]({link_oxford_chat}) | [📖 Cambridge]({link_cambridge_chat})")
                     
                     chave_sessao_chat = f"exemplos_chat_{index}"
                     if st.button("💡 Gerar mais 3 exemplos de uso", key=f"btn_chat_{index}"):
@@ -425,7 +428,7 @@ else:
 
     if not df_erros_audio.empty:
         st.markdown("---")
-        st.subheader("📚 Histórico de Correções de Áudio Filtrado")
+        st.subheader("📚 Histórico de Correções")
         
         ITENS_POR_PAGINA = 20
         total_linhas = len(df_erros_audio)
@@ -464,10 +467,13 @@ else:
                         texto_url = urllib.parse.quote(frase_correta)
                         link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                         link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                        link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                        link_oxford = f"https://www.oxfordlearnersdictionaries.com/search/english/?q={texto_url}"
+                        link_cambridge = f"https://dictionary.cambridge.org/search/english/direct/?q={texto_url}"
                         
                         st.success(f"**Como falar corretamente:** {frase_correta}")
                         st.info(f"**Explicação:**\n{dica_estudo}")
-                        st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                        st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Tradutor]({link_gtranslate}) | [📚 Oxford]({link_oxford}) | [📖 Cambridge]({link_cambridge})")
                         
                         chave_sessao = f"exemplos_cal_{index}"
                         if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_cal_{index}"):
@@ -489,10 +495,13 @@ else:
                     texto_url = urllib.parse.quote(frase_correta)
                     link_playphrase = f"https://www.playphrase.me/#/search?q={texto_url}"
                     link_youglish = f"https://pt.youglish.com/pronounce/{texto_url}/english"
+                    link_gtranslate = f"https://translate.google.com/?sl=en&tl=pt&text={texto_url}&op=translate"
+                    link_oxford = f"https://www.oxfordlearnersdictionaries.com/search/english/?q={texto_url}"
+                    link_cambridge = f"https://dictionary.cambridge.org/search/english/direct/?q={texto_url}"
                     
                     st.success(f"**Como falar corretamente:** {frase_correta}")
                     st.info(f"**Explicação:**\n{dica_estudo}")
-                    st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish})")
+                    st.markdown(f"**Pratique:** [🎬 PlayPhrase]({link_playphrase}) | [🗣️ YouGlish]({link_youglish}) | [🌐 Tradutor]({link_gtranslate}) | [📚 Oxford]({link_oxford}) | [📖 Cambridge]({link_cambridge})")
                     
                     chave_sessao = f"exemplos_list_{index}"
                     if st.button("💡 Gerar 3 exemplos de uso", key=f"btn_list_{index}"):
@@ -525,5 +534,5 @@ else:
                         st.rerun() 
     else:
         st.markdown("---")
-        st.subheader("📚 Histórico de Correções de Áudio Filtrado")
+        st.subheader("📚 Histórico de Correções")
         st.success(f"🎉 Excelente! A aula com {professor_selecionado} não teve nenhum erro gramatical grave registrado pela IA.")
